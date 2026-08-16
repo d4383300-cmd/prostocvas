@@ -1,7 +1,7 @@
 const socket = io();
 let currentUser = null;
 
-// 🔊 Безопасный звук
+// 🔊 Безопасный звук при старте
 function playSound(type) {
     try {
         const AudioContext = window.AudioContext || window.webkitAudioContext;
@@ -32,7 +32,7 @@ function playSound(type) {
     } catch(e) {}
 }
 
-// ⏱️ Гарантированный запуск заставки и переход в меню
+// ⏱️ Гарантированный запуск интерфейса после заставки
 function startApp() {
     playSound('appear');
     setTimeout(() => playSound('fall'), 3000);
@@ -41,19 +41,16 @@ function startApp() {
         const intro = document.getElementById('intro-screen');
         const app = document.getElementById('app');
 
-        if (intro) {
-            intro.style.display = 'none';
-        }
+        if (intro) intro.style.display = 'none';
         if (app) {
             app.classList.remove('hidden');
             app.classList.add('visible');
-            app.style.display = 'flex'; // Принудительный показ
+            app.style.display = 'flex';
         }
         document.body.style.backgroundColor = '#a1c4fd';
     }, 5000);
 }
 
-// Запускаем сразу, если DOM уже готов, либо по событию
 if (document.readyState === 'loading') {
     document.addEventListener('DOMContentLoaded', startApp);
 } else {
@@ -73,11 +70,15 @@ function switchTab(tabName) {
     }
 }
 
-// 💬 Socket.IO логика
-socket.on('init_user', (user) => {
+// 👤 Обновление профиля пользователя
+function updateUserUI(user) {
     currentUser = user;
     const nickEl = document.getElementById('prof-nick');
     const dateEl = document.getElementById('prof-date');
+    const badgeEl = document.getElementById('prof-badge');
+    const statusEl = document.getElementById('prof-status');
+    const bindBtn = document.getElementById('tg-bind-btn');
+
     if (nickEl) nickEl.innerText = user.nick;
     if (dateEl) dateEl.innerText = user.regDate;
     
@@ -85,13 +86,24 @@ socket.on('init_user', (user) => {
         const rewardSec = document.getElementById('reward-section');
         if (rewardSec) rewardSec.classList.remove('hidden');
     }
-});
 
-socket.on('user_updated', (user) => {
-    currentUser = user;
-    const nickEl = document.getElementById('prof-nick');
-    if (nickEl) nickEl.innerText = user.nick;
-});
+    if (user.verified) {
+        if (badgeEl) badgeEl.innerHTML = '<span style="color:#007AFF; font-weight:bold;">✔️</span>';
+        if (statusEl) statusEl.innerHTML = '<b style="color:#34C759;">Подтвержден ✔️</b>';
+        if (bindBtn) bindBtn.style.display = 'none';
+    } else {
+        if (badgeEl) badgeEl.innerHTML = '';
+        if (statusEl) statusEl.innerHTML = '<span style="color:#FF3B30;">Не верифицирован</span>';
+        if (bindBtn) {
+            bindBtn.style.display = 'block';
+            if (user.tgLink) bindBtn.href = user.tgLink;
+        }
+    }
+}
+
+// 💬 Socket.IO Слушатели
+socket.on('init_user', updateUserUI);
+socket.on('user_updated', updateUserUI);
 
 socket.on('load_history', (history) => {
     const box = document.getElementById('chat-box');
@@ -125,6 +137,7 @@ socket.on('bot_message', (data) => {
     box.scrollTop = box.scrollHeight;
 });
 
+// 🎨 Отрисовка сообщений в чате
 function renderMessage(msg) {
     const box = document.getElementById('chat-box');
     if (!box) return;
@@ -133,6 +146,7 @@ function renderMessage(msg) {
     
     const prefixStr = msg.prefix ? `<span style="color:${msg.color}">[${msg.prefix}]</span> ` : '';
     const nameStr = `<b style="color:${msg.color}">${msg.sender}</b>`;
+    const verifyBadge = msg.verified ? ` <span style="color:#007AFF;">✔️</span>` : '';
     
     let badge = '';
     if (msg.isBot) {
@@ -141,11 +155,12 @@ function renderMessage(msg) {
         badge = `<span class="tg-badge">Telegram</span>`;
     }
 
-    div.innerHTML = `<small style="color:#666">[${msg.time}]</small> ${badge}${prefixStr}${nameStr}: ${msg.text}`;
+    div.innerHTML = `<small style="color:#666">[${msg.time}]</small> ${badge}${prefixStr}${nameStr}${verifyBadge}: ${msg.text}`;
     box.appendChild(div);
     box.scrollTop = box.scrollHeight;
 }
 
+// 💾 Сохранение истории в браузер
 function saveLocally(newMsgs) {
     const existing = JSON.parse(localStorage.getItem('local_chat') || '[]');
     const combined = [...existing, ...newMsgs];
@@ -153,6 +168,7 @@ function saveLocally(newMsgs) {
     localStorage.setItem('local_chat', JSON.stringify(unique.slice(-100)));
 }
 
+// ✉️ Отправка сообщения
 function sendMessage() {
     const input = document.getElementById('msg-input');
     if (input && input.value.trim()) {
@@ -167,9 +183,10 @@ document.addEventListener('keypress', (e) => {
     }
 });
 
+// 🛠️ Сохранение префикса и цвета
 function saveCustomization() {
     const prefix = document.getElementById('pref-input').value;
     const color = document.getElementById('color-input').value;
     socket.emit('update_customization', { prefix, color });
-    alert('Настройки сохранены!');
+    alert('Настройки успешно сохранены!');
 }
