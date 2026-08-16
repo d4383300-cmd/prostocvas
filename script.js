@@ -32,7 +32,7 @@ function playSound(type) {
     } catch(e) {}
 }
 
-// ⏱️ Гарантированный запуск интерфейса после заставки
+// ⏱️ Переход в меню
 function startApp() {
     playSound('appear');
     setTimeout(() => playSound('fall'), 3000);
@@ -78,6 +78,7 @@ function updateUserUI(user) {
     const badgeEl = document.getElementById('prof-badge');
     const statusEl = document.getElementById('prof-status');
     const bindBtn = document.getElementById('tg-bind-btn');
+    const adminPanel = document.getElementById('admin-panel');
 
     if (nickEl) nickEl.innerText = user.nick;
     if (dateEl) dateEl.innerText = user.regDate;
@@ -89,7 +90,9 @@ function updateUserUI(user) {
 
     if (user.verified) {
         if (badgeEl) badgeEl.innerHTML = '<span style="color:#007AFF; font-weight:bold;">✔️</span>';
-        if (statusEl) statusEl.innerHTML = '<b style="color:#34C759;">Подтвержден ✔️</b>';
+        if (statusEl) statusEl.innerHTML = user.isAdmin 
+            ? '<b style="color:#DAA520;">Главный Администратор 👑</b>' 
+            : '<b style="color:#34C759;">Подтвержден ✔️</b>';
         if (bindBtn) bindBtn.style.display = 'none';
     } else {
         if (badgeEl) badgeEl.innerHTML = '';
@@ -98,6 +101,11 @@ function updateUserUI(user) {
             bindBtn.style.display = 'block';
             if (user.tgLink) bindBtn.href = user.tgLink;
         }
+    }
+
+    // Отображаем Панель Админа только если ты авторизован
+    if (user.isAdmin && adminPanel) {
+        adminPanel.classList.remove('hidden');
     }
 }
 
@@ -137,7 +145,7 @@ socket.on('bot_message', (data) => {
     box.scrollTop = box.scrollHeight;
 });
 
-// 🎨 Отрисовка сообщений в чате
+// 🎨 Отрисовка сообщений
 function renderMessage(msg) {
     const box = document.getElementById('chat-box');
     if (!box) return;
@@ -160,7 +168,7 @@ function renderMessage(msg) {
     box.scrollTop = box.scrollHeight;
 }
 
-// 💾 Сохранение истории в браузер
+// 💾 Сохранение истории
 function saveLocally(newMsgs) {
     const existing = JSON.parse(localStorage.getItem('local_chat') || '[]');
     const combined = [...existing, ...newMsgs];
@@ -183,10 +191,18 @@ document.addEventListener('keypress', (e) => {
     }
 });
 
-// 🛠️ Сохранение префикса и цвета
+// 🛠️ Сохранение кастомизации
 function saveCustomization() {
     const prefix = document.getElementById('pref-input').value;
     const color = document.getElementById('color-input').value;
     socket.emit('update_customization', { prefix, color });
     alert('Настройки успешно сохранены!');
+}
+
+// 👑 Добавление нового чата Админом
+function addNewChat() {
+    const input = document.getElementById('new-chat-id');
+    if (!input || !input.value.trim()) return;
+    socket.emit('admin_add_chat', input.value.trim());
+    input.value = '';
 }
