@@ -11,7 +11,7 @@ const io = new Server(server, { cors: { origin: "*" } });
 
 app.set('trust proxy', 1);
 
-// 🛡️ Защита от DDoS на уровне HTTP
+// 🛡️ Защита от DDoS
 const limiter = rateLimit({
     windowMs: 1 * 60 * 1000,
     max: 120,
@@ -25,32 +25,31 @@ app.get('/', (req, res) => {
     res.sendFile(path.join(__dirname, 'index.html'));
 });
 
-// 🤖 НАСТРОЙКА TELEGRAM БОТА
+// 🤖 TELEGRAM BOT
 const TG_TOKEN = '8161722600:AAEef8zTPXRw7-fPgkHdkVX1pQqan7I5snY';
 const TG_CHAT_ID = '-1004349256495';
 
 const tgBot = new TelegramBot(TG_TOKEN, { polling: true });
+tgBot.on('polling_error', (error) => console.log('TG Notice:', error.code));
 
-// Игнорируем старые ошибки подключения Telegram, чтобы сервер не падал
-tgBot.on('polling_error', (error) => console.log('TG Polling Notice:', error.code));
-
-// 📝 База данных в памяти
-const messageHistory = []; // Сохраняем первые 30 сообщений
+// 📝 БАЗА ДАННЫХ В ПАМЯТИ
+const messageHistory = [];
 const usersByIp = {};
 const usedNicks = new Set();
 let onlineCount = 0;
-
-// Структура для отслеживания спама: IP -> Массив временных меток сообщений
 const userSpamTracker = {};
 
-const prefixes = ["Зайчик", "Цыпленок", "Бабка", "Мамка", "ДядяФедор", "Матроскин", "Шарик", "Печкин", "Колобок", "Ежик", "Лис", "Совенок", "Волк", "Тигренок"];
-function generateUniqueNick(baseNick = null) {
-    let name = baseNick || prefixes[Math.floor(Math.random() * prefixes.length)];
+// 🔤 ОГРОМНЫЙ ГЕНЕРАТОР НИКНЕЙМОВ (10,000+ вариантов)
+const adj = ["Веселый", "Озорной", "Быстрый", "Хитрый", "Добрый", "Смелый", "Тихий", "Спящий", "Умный", "Сладкий", "Морской", "Лесной", "Крутой", "Пушистый", "Черный", "Белый", "Рыжий", "Золотой", "Солнечный", "Снежный", "Звездный", "Лунный", "Огненный", "Ледяной"];
+const nouns = ["Зайчик", "Цыпленок", "Бабка", "Мамка", "ДядяФедор", "Матроскин", "Шарик", "Печкин", "Колобок", "Ежик", "Лис", "Совенок", "Волк", "Тигренок", "Медведь", "Кот", "Барсук", "Хомяк", "Пингвин", "Дракон", "Дед", "Внук", "Пончик", "Суслик"];
+
+function generateUniqueNick() {
+    let name = `${adj[Math.floor(Math.random() * adj.length)]}${nouns[Math.floor(Math.random() * nouns.length)]}`;
     if (!usedNicks.has(name)) {
         usedNicks.add(name);
         return name;
     }
-    let counter = 777;
+    let counter = Math.floor(Math.random() * 9000) + 1000;
     while (usedNicks.has(`${name}${counter}`)) {
         counter++;
     }
@@ -59,35 +58,67 @@ function generateUniqueNick(baseNick = null) {
     return finalNick;
 }
 
-const BANNED_WORDS = ["блят", "хуй", "пизд", "ебат", "сука", "чмо", "гной", "http", "https", "t.me", ".com", ".ru", "в лс", "пиши в лс"];
+// 🤬 МАТЫ И ИХ ЗАМЕНА
+const BANNED_WORDS = ["блят", "хуй", "пизд", "ебат", "сука", "чмо", "гной"];
+function filterBadWords(text) {
+    let result = text;
+    BANNED_WORDS.forEach(word => {
+        const regex = new RegExp(word, 'gi');
+        result = result.replace(regex, '####');
+    });
+    return result;
+}
 
-// 📥 СООБЩЕНИЯ ИЗ TELEGRAM -> НА САЙТ
+// 📲 ПРИВЯЗКА TELEGRAM ИЗ ЧАТА С БОТОМ
+tgBot.onText(/\/start (.+)/, (msg, match) => {
+    const tgUserId = msg.from.id;
+    const userIpEncoded = match[1];
+    const clientIp = Buffer.from(userIpEncoded, 'base64').toString('ascii');
+
+    if (usersByIp[clientIp]) {
+        usersByIp[clientIp].verified = true;
+        usersByIp[clientIp].tgId = tgUserId;
+        
+        tgBot.sendMessage(msg.chat.id, "✅ Вы успешно привязали свой аккаунт к Простоквашино! Теперь у вас есть галочка ✔️.");
+
+        // Уведомляем клиента на сайте
+        if (usersByIp[clientIp].socketId) {
+            io.to(usersByIp[clientIp].socketId).emit('user_updated', usersByIp[clientIp]);
+            io.to(usersByIp[clientIp].socketId).emit('bot_message', { text: "🎉 Ваш аккаунт успешно верифицирован! Вам выдана галочка ✔️" });
+        }
+    }
+});
+
+tgBot.onText(/\/start$/, (msg) => {
+    tgBot.sendMessage(msg.chat.id, "Привет! Перейдите в Профиль на сайте и нажмите кнопку 'Привязать Telegram' для верификации.");
+});
+
+// 📥 TELEGRAM ГРУППА -> САЙТ
 tgBot.on('message', (msg) => {
-    // Проверяем, что сообщение пришло именно из нужного чата
     if (String(msg.chat.id) !== TG_CHAT_ID) return;
-    if (!msg.text) return; // Игнорируем стикеры/картинки без текста
+    if (!msg.text || msg.text.startsWith('/start')) return;
 
     const senderName = msg.from.first_name || msg.from.username || "TG_User";
-    
+    const censoredText = filterBadWords(msg.text);
+
     const tgMsgData = {
         id: Date.now(),
         sender: senderName,
         prefix: 'TG',
         color: '#0078D7',
-        text: msg.text,
+        text: censoredText,
         time: new Date().toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' }),
-        isTelegram: true
+        isTelegram: true,
+        verified: true
     };
 
-    // Сохраняем в истории (не более 30)
     messageHistory.push(tgMsgData);
     if (messageHistory.length > 30) messageHistory.shift();
 
-    // Транслируем всем на сайт
     io.emit('new_message', tgMsgData);
 });
 
-// 🌐 SOCKET.IO ЛОГИКА (САЙТ)
+// 🌐 SOCKET.IO (САЙТ)
 io.on('connection', (socket) => {
     onlineCount++;
     const clientIp = socket.handshake.headers['x-forwarded-for'] || socket.handshake.address;
@@ -102,14 +133,20 @@ io.on('connection', (socket) => {
             activeDays: 0,
             todayMessages: 0,
             lastActiveDay: new Date().toDateString(),
-            rewardEligible: false
+            rewardEligible: false,
+            verified: false
         };
     }
 
     const user = usersByIp[clientIp];
+    user.socketId = socket.id;
+
+    // Ссылка для привязки Telegram через base64 IP
+    const encodedIp = Buffer.from(clientIp).toString('base64');
+    const botUsername = "xurestv_bot"; // Твой бот
+    user.tgLink = `https://t.me/${botUsername}?start=${encodedIp}`;
+
     socket.emit('init_user', user);
-    
-    // Отправляем исторрию БЕЗ автоматического дублирования рекламы при перезагрузке
     socket.emit('load_history', messageHistory.slice(-30));
     io.emit('online_update', onlineCount);
 
@@ -119,14 +156,9 @@ io.on('connection', (socket) => {
         if (text.length === 0 || text.length > 200) return;
 
         const now = Date.now();
-        if (!userSpamTracker[clientIp]) {
-            userSpamTracker[clientIp] = [];
-        }
+        if (!userSpamTracker[clientIp]) userSpamTracker[clientIp] = [];
+        userSpamTracker[clientIp] = userSpamTracker[clientIp].filter(t => now - t < 4000);
 
-        // Очищаем историю сообщений старше 4 секунд
-        userSpamTracker[clientIp] = userSpamTracker[clientIp].filter(timestamp => now - timestamp < 4000);
-
-        // 🛑 ПРОВЕРКА НА СПАМ (Максимум 3 сообщения за 4 секунды)
         if (userSpamTracker[clientIp].length >= 3) {
             socket.emit('bot_message', { 
                 text: `⚠️ **${user.nick}**, это спам! Разрешено не более 3 сообщений за 4 секунды.`,
@@ -134,17 +166,16 @@ io.on('connection', (socket) => {
             });
             return;
         }
-
         userSpamTracker[clientIp].push(now);
 
-        // --- Команды ---
+        // Команды
         if (text.toLowerCase() === 'стата') {
             socket.emit('bot_message', { text: `📊 Сейчас на сайте пользователей: ${onlineCount}` });
             return;
         }
         if (text.toLowerCase() === 'правила') {
             socket.emit('bot_message', { 
-                text: `📜 **Правила:**\n1. Призыв в ЛС запрещен!\n2. Ссылки запрещены!\n3. Мат запрещен!\n4. Спам запрещен!`,
+                text: `📜 **Правила:**\n1. Призыв в ЛС запрещен!\n2. Ссылки запрещены!\n3. Спам запрещен!`,
                 showRulesBtn: true
             });
             return;
@@ -157,19 +188,10 @@ io.on('connection', (socket) => {
             return;
         }
 
-        // --- Модерация Харестом ---
-        const lowerText = text.toLowerCase();
-        const isViolated = BANNED_WORDS.some(word => lowerText.includes(word));
+        // Замена мата на ####
+        const cleanText = filterBadWords(text);
 
-        if (isViolated) {
-            socket.emit('bot_message', { 
-                text: `⚠️ **${user.nick}**, не нарушай правила!`, 
-                showRulesBtn: true 
-            });
-            return;
-        }
-
-        // Подсчет активности
+        // Активность
         const today = new Date().toDateString();
         if (user.lastActiveDay !== today) {
             if (user.todayMessages >= 50) user.activeDays++;
@@ -188,19 +210,20 @@ io.on('connection', (socket) => {
             sender: user.nick,
             prefix: user.prefix,
             color: user.color,
-            text: text,
+            text: cleanText,
             time: new Date().toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' }),
-            isBot: false
+            isBot: false,
+            verified: user.verified
         };
 
         messageHistory.push(msgData);
         if (messageHistory.length > 30) messageHistory.shift();
 
-        // 📤 ОТПРАВКА СООБЩЕНИЯ С САЙТА В TELEGRAM ЧАТ
-        const tgFormatText = `${user.prefix ? '[' + user.prefix + '] ' : ''}${user.nick}: ${text}`;
+        // Перенос в Telegram
+        const badge = user.verified ? ' ✔️' : '';
+        const tgFormatText = `${user.prefix ? '[' + user.prefix + '] ' : ''}${user.nick}${badge}: ${cleanText}`;
         tgBot.sendMessage(TG_CHAT_ID, tgFormatText).catch(() => {});
 
-        // Рассылка по сайту
         io.emit('new_message', msgData);
     });
 
@@ -217,7 +240,6 @@ io.on('connection', (socket) => {
     });
 });
 
-// 🤖 Рекламный Бот "Харест" отправляет сообщение строго 1 раз в 1.30 минуты (без спама при рестарте)
 setInterval(() => {
     const botMsg = {
         id: Date.now(),
