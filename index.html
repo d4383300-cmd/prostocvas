@@ -83,6 +83,15 @@
                     <a id="tg-bind-btn" href="#" target="_blank" class="vista-btn" style="display: block; text-decoration: none; text-align: center; padding: 10px; background: linear-gradient(to bottom, #2b78c5 0%, #1a518b 100%);">
                         ✈️ Привязать аккаунт к Telegram
                     </a>
+
+                    <!-- 👑 ПАНЕЛЬ АДМИНИСТРАТОРА (ВИДНА ТОЛЬКО ТЕБЕ ПОСЛЕ ВЕРИФИКАЦИИ) -->
+                    <div id="admin-panel" class="hidden" style="margin-top: 15px; padding: 10px; background: rgba(255, 215, 0, 0.2); border: 1px solid #DAA520; border-radius: 6px;">
+                        <h3 style="color: #8B6508;">👑 Панель Администратора</h3>
+                        <p style="font-size: 0.85rem; margin-top: 4px;">Добавьте ID нового Telegram чата для трансляции сообщений:</p>
+                        
+                        <input type="text" id="new-chat-id" placeholder="Например: -100123456789" style="width: 100%; padding: 6px; margin: 8px 0;">
+                        <button class="vista-btn" onclick="addNewChat()" style="width: 100%; background: linear-gradient(to bottom, #4CAF50 0%, #2E7D32 100%);">➕ Добавить чат в систему</button>
+                    </div>
                 </div>
             </section>
 
