@@ -3,107 +3,127 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Простоквашино Чат</title>
+    <title>Простоквашино — Dark Edition</title>
     <link rel="stylesheet" href="styles.css">
 </head>
 <body>
 
-    <!-- 🌟 Заставка анимации -->
     <div id="intro-screen">
         <div id="logo">
-            <span style="--i:1; color:#007AFF;">П</span>
-            <span style="--i:2; color:#34C759;">р</span>
-            <span style="--i:3; color:#FF9500;">о</span>
-            <span style="--i:4; color:#AF52DE;">с</span>
-            <span style="--i:5; color:#FF2D55;">т</span>
-            <span style="--i:6; color:#5856D6;">о</span>
-            <span style="--i:7; color:#007AFF;">к</span>
-            <span style="--i:8; color:#34C759;">в</span>
-            <span style="--i:9; color:#FF9500;">а</span>
-            <span style="--i:10; color:#AF52DE;">ш</span>
-            <span style="--i:11; color:#FF2D55;">и</span>
-            <span style="--i:12; color:#5856D6;">н</span>
-            <span style="--i:13; color:#007AFF;">о</span>
+            <span style="--i:1; color:#00E5FF;">П</span>
+            <span style="--i:2; color:#7C4DFF;">р</span>
+            <span style="--i:3; color:#FF4081;">о</span>
+            <span style="--i:4; color:#00E676;">с</span>
+            <span style="--i:5; color:#FFEA00;">т</span>
+            <span style="--i:6; color:#FF9100;">о</span>
+            <span style="--i:7; color:#00E5FF;">к</span>
+            <span style="--i:8; color:#7C4DFF;">в</span>
+            <span style="--i:9; color:#FF4081;">а</span>
+            <span style="--i:10; color:#00E676;">ш</span>
+            <span style="--i:11; color:#FFEA00;">и</span>
+            <span style="--i:12; color:#FF9100;">н</span>
+            <span style="--i:13; color:#00E5FF;">о</span>
         </div>
     </div>
 
-    <!-- 🪟 Интерфейс Windows Vista -->
     <div id="app" class="hidden">
-        
-        <!-- Навигационные вкладки -->
         <nav class="vista-nav">
             <button class="vista-btn active" onclick="switchTab('chat')">💬 Чат</button>
+            <button class="vista-btn" onclick="switchTab('game')">🎮 2D GAME</button>
             <button class="vista-btn" onclick="switchTab('shop')">🛒 Магазин</button>
             <button class="vista-btn" onclick="switchTab('profile')">👤 Профиль</button>
             <button class="vista-btn" onclick="switchTab('rules')">📜 Правила</button>
         </nav>
 
-        <!-- Главный контейнер окон -->
         <main class="vista-window">
             
             <!-- Вкладка 1: Чат -->
             <section id="tab-chat" class="tab-content active">
                 <div id="chat-box"></div>
+                
+                <!-- Контейнер плашки ответа -->
+                <div id="reply-preview" class="reply-preview hidden">
+                    <span id="reply-target-text">Ответ для: ...</span>
+                    <button onclick="cancelReply()" class="cancel-reply-btn">✕</button>
+                </div>
+
                 <div class="chat-controls">
                     <input type="text" id="msg-input" placeholder="Напишите сообщение..." maxlength="200" autocomplete="off">
                     <button class="vista-btn" onclick="sendMessage()">Отправить</button>
                 </div>
             </section>
 
-            <!-- Вкладка 2: Магазин -->
+            <!-- Вкладка 2: 2D GAME -->
+            <section id="tab-game" class="tab-content">
+                <div class="game-container">
+                    <canvas id="gameCanvas" width="800" height="500"></canvas>
+                    
+                    <div class="game-ui">
+                        <div id="joystick-zone">
+                            <div id="joystick-base">
+                                <div id="joystick-stick"></div>
+                            </div>
+                        </div>
+                        <div class="game-actions">
+                            <button class="vista-btn action-smoke" onclick="triggerSmoke()">🚬 Курить</button>
+                            <button class="vista-btn action-casino" onclick="openCasino()">🎰 Казино</button>
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            <!-- Вкладка 3: Магазин -->
             <section id="tab-shop" class="tab-content">
                 <div class="vista-card">
                     <h2>🛒 Магазин кастомизации</h2>
                     <p>Проявляйте активность на сайте 3 дня подряд (от 50 сообщений в день), чтобы разблокировать смену цвета и префикса!</p>
                     
                     <div id="reward-section" class="hidden">
-                        <hr style="margin: 10px 0; border: 0; border-top: 1px solid #708090;">
+                        <hr class="vista-divider">
                         <h3>🎉 Награда разблокирована!</h3>
                         <br>
                         <label><b>Ваш префикс (до 8 символов):</b></label><br>
-                        <input type="text" id="pref-input" placeholder="Например: VIP" maxlength="8" style="width: 100%; padding: 6px; margin: 5px 0 10px 0;"><br>
+                        <input type="text" id="pref-input" placeholder="Например: VIP" maxlength="8" class="dark-input"><br>
                         
                         <label><b>Цвет ника и префикса:</b></label><br>
-                        <input type="color" id="color-input" value="#007AFF" style="width: 100%; height: 40px; border: none; cursor: pointer;"><br><br>
+                        <input type="color" id="color-input" value="#00E5FF" class="dark-color-picker"><br><br>
                         
                         <button class="vista-btn" onclick="saveCustomization()">Сохранить изменения</button>
                     </div>
                 </div>
             </section>
 
-            <!-- Вкладка 3: Профиль -->
+            <!-- Вкладка 4: Профиль -->
             <section id="tab-profile" class="tab-content">
                 <div class="vista-card">
                     <h2>👤 Ваш профиль</h2>
                     <p><b>Ваш Ник:</b> <span id="prof-nick">...</span> <span id="prof-badge"></span></p>
                     <p><b>Дата первого захода:</b> <span id="prof-date">...</span></p>
                     <p><b>Статус аккаунта:</b> <span id="prof-status">Не верифицирован</span></p>
-                    <hr style="margin: 12px 0; border: 0; border-top: 1px solid #708090;">
                     
-                    <a id="tg-bind-btn" href="#" target="_blank" class="vista-btn" style="display: block; text-decoration: none; text-align: center; padding: 10px; background: linear-gradient(to bottom, #2b78c5 0%, #1a518b 100%);">
+                    <hr class="vista-divider">
+                    <h3>✏️ Сменить никнейм</h3>
+                    <div style="display: flex; gap: 8px; margin: 10px 0;">
+                        <input type="text" id="custom-nick-input" placeholder="Макс. 6 символов" maxlength="6" class="dark-input" style="flex: 1;">
+                        <button class="vista-btn" onclick="changeCustomNick()">Сменить</button>
+                    </div>
+
+                    <hr class="vista-divider">
+                    <a id="tg-bind-btn" href="#" target="_blank" class="vista-btn bind-btn">
                         ✈️ Привязать аккаунт к Telegram
                     </a>
-
-                    <!-- 👑 ПАНЕЛЬ АДМИНИСТРАТОРА (ВИДНА ТОЛЬКО ТЕБЕ ПОСЛЕ ВЕРИФИКАЦИИ) -->
-                    <div id="admin-panel" class="hidden" style="margin-top: 15px; padding: 10px; background: rgba(255, 215, 0, 0.2); border: 1px solid #DAA520; border-radius: 6px;">
-                        <h3 style="color: #8B6508;">👑 Панель Администратора</h3>
-                        <p style="font-size: 0.85rem; margin-top: 4px;">Добавьте ID нового Telegram чата для трансляции сообщений:</p>
-                        
-                        <input type="text" id="new-chat-id" placeholder="Например: -100123456789" style="width: 100%; padding: 6px; margin: 8px 0;">
-                        <button class="vista-btn" onclick="addNewChat()" style="width: 100%; background: linear-gradient(to bottom, #4CAF50 0%, #2E7D32 100%);">➕ Добавить чат в систему</button>
-                    </div>
                 </div>
             </section>
 
-            <!-- Вкладка 4: Правила -->
+            <!-- Вкладка 5: Правила -->
             <section id="tab-rules" class="tab-content">
                 <div class="vista-card">
                     <h2>📜 Правила чата Простоквашино</h2>
                     <ul>
                         <li><b>1.</b> Запрещено призывать пользователей писать в ЛС.</li>
                         <li><b>2.</b> Публикация любых сторонних ссылок запрещена.</li>
-                        <li><b>3.</b> Спам (более 3 сообщений за 4 секунды) строго блокируется.</li>
-                        <li><b>4.</b> Запрещен открытый мат. (Система фильтрации автоматически заменяет его на ####).</li>
+                        <li><b>3.</b> Спам строго блокируется.</li>
+                        <li><b>4.</b> Запрещен открытый мат (автоматически заменяется на ####).</li>
                     </ul>
                 </div>
             </section>
@@ -111,7 +131,16 @@
         </main>
     </div>
 
-    <!-- Подключение библиотек и скриптов -->
+    <!-- Модалка Казино -->
+    <div id="casino-modal" class="modal hidden">
+        <div class="modal-content vista-card">
+            <h2>🎰 Казино Простоквашино</h2>
+            <div id="slots-display" class="slots-display">❓ | ❓ | ❓</div>
+            <button class="vista-btn" onclick="spinSlots()">Крутить слот!</button>
+            <button class="vista-btn cancel-btn" onclick="closeCasino()">Закрыть</button>
+        </div>
+    </div>
+
     <script src="/socket.io/socket.io.js"></script>
     <script src="script.js"></script>
 </body>
