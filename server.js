@@ -25,12 +25,14 @@ app.get('/', (req, res) => {
     res.sendFile(path.join(__dirname, 'index.html'));
 });
 
-// 🤖 TELEGRAM BOT
+// 🤖 TELEGRAM BOT & ADMIN CONFIG
 const TG_TOKEN = '8161722600:AAEef8zTPXRw7-fPgkHdkVX1pQqan7I5snY';
-const ADMIN_TG_ID = 7505593850;
+const ADMIN_TG_ID = 7505593850; // Твой ID Главного Админа
 
-// Список подключенных чатов Telegram
+// Хранилище подключенных чатов и забаненных пользователей
 const connectedChatIds = new Set(['-1004349256495']);
+const bannedUsers = new Set();
+const userState = {}; // Состояние ввода (ожидание ссылки или ID)
 
 const tgBot = new TelegramBot(TG_TOKEN, { polling: true });
 tgBot.on('polling_error', (error) => console.log('TG Notice:', error.code));
@@ -44,7 +46,7 @@ const userSpamTracker = {};
 
 // 🔤 ГЕНЕРАТОР НИКНЕЙМОВ
 const adj = ["Веселый", "Озорной", "Быстрый", "Хитрый", "Добрый", "Смелый", "Тихий", "Спящий", "Умный", "Сладкий", "Морской", "Лесной", "Крутой", "Пушистый", "Черный", "Белый", "Рыжий", "Золотой", "Солнечный", "Снежный", "Звездный", "Лунный", "Огненный", "Ледяной"];
-const nouns = ["Зайчик", "Цыпленок", "Бабка", "Мамка", "ДядяФедор", "Матроскиin", "Шарик", "Печкин", "Колобок", "Ежик", "Лис", "Совенок", "Волк", "Тигренок", "Медведь", "Кот", "Барсук", "Хомяк", "Пингвин", "Дракон", "Дед", "Внук", "Пончик", "Суслик"];
+const nouns = ["Зайчик", "Цыпленок", "Бабка", "Мамка", "ДядяФедор", "Матроскин", "Шарик", "Печкин", "Колобок", "Ежик", "Лис", "Совенок", "Волк", "Тигренок", "Медведь", "Кот", "Барсук", "Хомяк", "Пингвин", "Дракон", "Дед", "Внук", "Пончик", "Суслик"];
 
 function generateUniqueNick() {
     let name = `${adj[Math.floor(Math.random() * adj.length)]}${nouns[Math.floor(Math.random() * nouns.length)]}`;
@@ -72,48 +74,183 @@ function filterBadWords(text) {
     return result;
 }
 
-// 📲 ПРИВЯЗКА TELEGRAM И АДМИНКА
-tgBot.onText(/\/start (.+)/, (msg, match) => {
-    const tgUserId = msg.from.id;
-    const userIpEncoded = match[1];
-    const clientIp = Buffer.from(userIpEncoded, 'base64').toString('ascii');
+// 👑 МЕНЮ В TELEGRAM ДЛЯ ВСЕХ И ДЛЯ АДМИНА
+function sendMainMenu(chatId, userId) {
+    if (bannedUsers.has(userId)) return;
 
-    if (usersByIp[clientIp]) {
-        usersByIp[clientIp].verified = true;
-        usersByIp[clientIp].tgId = tgUserId;
+    if (userId === ADMIN_TG_ID) {
+        const adminKeyboard = {
+            reply_markup: {
+                inline_keyboard: [
+                    [{ text: "➕ Добавить чат", callback_data: "admin_add_chat" }, { text: "➖ Удалить чат", callback_data: "admin_remove_chat" }],
+                    [{ text: "📜 Список чатов", callback_data: "admin_list_chats" }]
+                ]
+            }
+        };
+        tgBot.sendMessage(chatId, "👑 **Панель Главного Администратора**\nВыберите действие:", { parse_mode: 'Markdown', ...adminKeyboard });
+    } else {
+        const userKeyboard = {
+            reply_markup: {
+                inline_keyboard: [
+                    [{ text: "📩 Подать заявку на добавление бота", callback_data: "user_apply" }]
+                ]
+            }
+        };
+        tgBot.sendMessage(chatId, "👋 Добро пожаловать! Вы можете привязать аккаунт через профиль на сайте или подать заявку на добавление бота в ваш чат.", userKeyboard);
+    }
+}
 
-        if (Number(tgUserId) === ADMIN_TG_ID) {
-            usersByIp[clientIp].isAdmin = true;
-            tgBot.sendMessage(msg.chat.id, "👑 Добро пожаловать, Главный Админ! Вам открыт доступ к админ-панели на сайте.");
-        } else {
-            tgBot.sendMessage(msg.chat.id, "✅ Вы успешно привязали свой аккаунт к Простоквашино! Теперь у вас есть галочка ✔️.");
+// 📲 ОБРАБОТКА КОМАНДЫ /start И /admin
+tgBot.onText(/\/start(.*)/, (msg, match) => {
+    const userId = msg.from.id;
+    if (bannedUsers.has(userId)) return;
+
+    const payload = match[1] ? match[1].trim() : '';
+
+    if (payload) {
+        const clientIp = Buffer.from(payload, 'base64').toString('ascii');
+        if (usersByIp[clientIp]) {
+            usersByIp[clientIp].verified = true;
+            usersByIp[clientIp].tgId = userId;
+
+            if (userId === ADMIN_TG_ID) {
+                usersByIp[clientIp].isAdmin = true;
+                tgBot.sendMessage(msg.chat.id, "👑 Вы авторизованы как Администратор на сайте и в боте!");
+            } else {
+                tgBot.sendMessage(msg.chat.id, "✅ Ваш аккаунт успешно верифицирован! Вам выдана галочка ✔️ на сайте.");
+            }
+
+            if (usersByIp[clientIp].socketId) {
+                io.to(usersByIp[clientIp].socketId).emit('user_updated', usersByIp[clientIp]);
+                io.to(usersByIp[clientIp].socketId).emit('bot_message', { 
+                    text: usersByIp[clientIp].isAdmin 
+                        ? "👑 Вы авторизованы как Администратор!" 
+                        : "🎉 Ваш аккаунт успешно верифицирован! Вам выдана галочка ✔️" 
+                });
+            }
         }
+    }
+    
+    sendMainMenu(msg.chat.id, userId);
+});
 
-        if (usersByIp[clientIp].socketId) {
-            io.to(usersByIp[clientIp].socketId).emit('user_updated', usersByIp[clientIp]);
-            io.to(usersByIp[clientIp].socketId).emit('bot_message', { 
-                text: usersByIp[clientIp].isAdmin 
-                    ? "👑 Вы авторизованы как Администратор! Панель управления открыта в Профиле." 
-                    : "🎉 Ваш аккаунт успешно верифицирован! Вам выдана галочка ✔️" 
-            });
-        }
+tgBot.onText(/\/admin/, (msg) => {
+    if (msg.from.id === ADMIN_TG_ID) {
+        sendMainMenu(msg.chat.id, msg.from.id);
     }
 });
 
-tgBot.onText(/\/start$/, (msg) => {
-    tgBot.sendMessage(msg.chat.id, "Привет! Перейдите в Профиль на сайте и нажмите кнопку 'Привязать Telegram' для верификации.");
+// 🔘 ОБРАБОТКА ИНЛАЙН-КНОПОК ТЕЛЕГРАМ
+tgBot.on('callback_query', (query) => {
+    const userId = query.from.id;
+    const chatId = query.message.chat.id;
+    const data = query.data;
+
+    if (bannedUsers.has(userId)) {
+        tgBot.answerCallbackQuery(query.id, { text: "Вы заблокированы.", show_alert: true });
+        return;
+    }
+
+    // 👑 АДМИН-ДЕЙСТВИЯ
+    if (userId === ADMIN_TG_ID) {
+        if (data === 'admin_add_chat') {
+            userState[userId] = 'awaiting_add_chat_id';
+            tgBot.sendMessage(chatId, "Введите ID чата, который хотите добавить (например: `-100123456789`):", { parse_mode: 'Markdown' });
+        } 
+        else if (data === 'admin_remove_chat') {
+            userState[userId] = 'awaiting_remove_chat_id';
+            tgBot.sendMessage(chatId, "Введите ID чата, который хотите удалить из системы:", { parse_mode: 'Markdown' });
+        } 
+        else if (data === 'admin_list_chats') {
+            const list = Array.from(connectedChatIds).join('\n') || "Список пуст";
+            tgBot.sendMessage(chatId, `📜 **Подключенные чаты (${connectedChatIds.size}):**\n\`\`\`\n${list}\n\`\`\``, { parse_mode: 'Markdown' });
+        }
+        else if (data.startsWith('app_approve_')) {
+            const targetUserId = data.replace('app_approve_', '');
+            tgBot.sendMessage(targetUserId, "✅ **Ваша заявка принята!**\nПожалуйста, ожидайте сообщения или напишите администратору напрямую: @leymik", { parse_mode: 'Markdown' }).catch(() => {});
+            tgBot.editMessageText(`${query.message.text}\n\nСтатус: ✅ **ПРИНЯТО**`, { chat_id: chatId, message_id: query.message.message_id });
+        }
+        else if (data.startsWith('app_reject_')) {
+            const targetUserId = data.replace('app_reject_', '');
+            tgBot.sendMessage(targetUserId, "❌ К сожалению, администратор отклонил вашу заявку на добавление чата.").catch(() => {});
+            tgBot.editMessageText(`${query.message.text}\n\nСтатус: ❌ **ОТКЛОНЕНО**`, { chat_id: chatId, message_id: query.message.message_id });
+        }
+        else if (data.startsWith('app_ban_')) {
+            const targetUserId = Number(data.replace('app_ban_', ''));
+            bannedUsers.add(targetUserId);
+            tgBot.sendMessage(targetUserId, "⛔ Вы были заблокированы администратором.").catch(() => {});
+            tgBot.editMessageText(`${query.message.text}\n\nСтатус: ⛔ **ЗАБАНЕН**`, { chat_id: chatId, message_id: query.message.message_id });
+        }
+    }
+
+    // 👤 ОБЫЧНЫЕ ПОЛЬЗОВАТЕЛИ
+    if (data === 'user_apply') {
+        userState[userId] = 'awaiting_channel_link';
+        tgBot.sendMessage(chatId, "Отправьте ссылку на ваш Telegram канал/чат (например: `https://t.me/your_chat`):", { parse_mode: 'Markdown' });
+    }
+
+    tgBot.answerCallbackQuery(query.id);
 });
 
-// 📥 ЧТЕНИЕ СООБЩЕНИЙ ИЗ TELEGRAM -> НА САЙТ И В ДРУГИЕ TELEGRAM ЧАТЫ
+// 📩 ОБРАБОТКА ТЕКСТОВЫХ СООБЩЕНИЙ В БОТЕ
 tgBot.on('message', (msg) => {
+    const userId = msg.from.id;
+    const chatId = msg.chat.id;
+    const text = msg.text;
+
+    if (bannedUsers.has(userId) || !text || text.startsWith('/')) return;
+
+    // Ввод ссылки обычным пользователем
+    if (userState[userId] === 'awaiting_channel_link') {
+        delete userState[userId];
+        tgBot.sendMessage(chatId, "✅ Ваша заявка успешно отправлена! Ожидайте ответа администратора.");
+
+        const userMention = msg.from.username ? `@${msg.from.username}` : `ID: ${userId}`;
+        const adminApproveKeyboard = {
+            reply_markup: {
+                inline_keyboard: [
+                    [
+                        { text: "✅ Принять", callback_data: `app_approve_${userId}` },
+                        { text: "❌ Отклонить", callback_data: `app_reject_${userId}` },
+                        { text: "⛔ Бан", callback_data: `app_ban_${userId}` }
+                    ]
+                ]
+            }
+        };
+
+        tgBot.sendMessage(
+            ADMIN_TG_ID, 
+            `📩 **Новая заявка на добавление чата!**\n\n👤 **От кого:** ${userMention} (${userId})\n🔗 **Ссылка:** ${text}`, 
+            { parse_mode: 'Markdown', ...adminApproveKeyboard }
+        );
+        return;
+    }
+
+    // Ввод ID для добавления чата админом
+    if (userId === ADMIN_TG_ID && userState[userId] === 'awaiting_add_chat_id') {
+        delete userState[userId];
+        const cleanId = text.trim();
+        connectedChatIds.add(cleanId);
+        tgBot.sendMessage(chatId, `✅ Чат \`${cleanId}\` успешно добавлен в трансляцию!`, { parse_mode: 'Markdown' });
+        return;
+    }
+
+    // Ввод ID для удаления чата админом
+    if (userId === ADMIN_TG_ID && userState[userId] === 'awaiting_remove_chat_id') {
+        delete userState[userId];
+        const cleanId = text.trim();
+        connectedChatIds.delete(cleanId);
+        tgBot.sendMessage(chatId, `🗑️ Чат \`${cleanId}\` успешно удален из системы!`, { parse_mode: 'Markdown' });
+        return;
+    }
+
+    // 📥 РЕЛЕ СООБЩЕНИЙ ИЗ TELEGRAM ЧАТОВ -> НА САЙТ И В ДРУГИЕ ЧАТЫ
     const sourceChatId = String(msg.chat.id);
     if (!connectedChatIds.has(sourceChatId)) return;
-    if (!msg.text || msg.text.startsWith('/start')) return;
 
     const senderName = msg.from.first_name || msg.from.username || "TG_User";
-    const censoredText = filterBadWords(msg.text);
+    const censoredText = filterBadWords(text);
 
-    // 1. Отправляем на сайт
     const tgMsgData = {
         id: Date.now(),
         sender: senderName,
@@ -129,13 +266,10 @@ tgBot.on('message', (msg) => {
     if (messageHistory.length > 30) messageHistory.shift();
     io.emit('new_message', tgMsgData);
 
-    // 2. РАССЫЛКА В ДРУГИЕ TELEGRAM-ЧАТЫ (с синим смайликом 🔷)
     const crossChatText = `${senderName} 🔷: ${censoredText}`;
-    
-    connectedChatIds.forEach(chatId => {
-        // Отправляем во все чаты, КРОМЕ того, откуда пришло сообщение
-        if (chatId !== sourceChatId) {
-            tgBot.sendMessage(chatId, crossChatText).catch(() => {});
+    connectedChatIds.forEach(cId => {
+        if (cId !== sourceChatId) {
+            tgBot.sendMessage(cId, crossChatText).catch(() => {});
         }
     });
 });
@@ -180,7 +314,7 @@ io.on('connection', (socket) => {
         connectedChatIds.add(cleanChatId);
 
         socket.emit('bot_message', { 
-            text: `✅ **Чат ${cleanChatId} успешно добавлен!** Теперь сообщения транслируются между всеми чатами.` 
+            text: `✅ **Чат ${cleanChatId} успешно добавлен!**` 
         });
     });
 
@@ -250,7 +384,6 @@ io.on('connection', (socket) => {
         messageHistory.push(msgData);
         if (messageHistory.length > 30) messageHistory.shift();
 
-        // Отправка сообщений с сайта во все Telegram-чаты
         const badge = user.verified ? ' ✔️' : '';
         const tgFormatText = `${user.prefix ? '[' + user.prefix + '] ' : ''}${user.nick}${badge}: ${cleanText}`;
         
