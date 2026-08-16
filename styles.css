@@ -123,7 +123,7 @@ html, body {
     display: flex;
     flex-direction: column;
     gap: 8px;
-    user-select: text; /* Разрешено выделять и копировать ТОЛЬКО чат */
+    user-select: text;
     backdrop-filter: blur(5px);
 }
 
@@ -149,6 +149,16 @@ html, body {
     padding: 1px 4px;
     border-radius: 3px;
     margin-right: 4px;
+}
+
+.chat-msg .tg-badge {
+    background: #0078D7;
+    color: white;
+    font-size: 0.65rem;
+    padding: 1px 5px;
+    border-radius: 3px;
+    margin-right: 4px;
+    font-weight: bold;
 }
 
 .chat-link {
