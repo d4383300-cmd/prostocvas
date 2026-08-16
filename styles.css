@@ -1,0 +1,193 @@
+* {
+    box-sizing: border-box;
+    margin: 0;
+    padding: 0;
+    -webkit-tap-highlight-color: transparent;
+    user-select: none; /* Запрет обводки и копирования везде, кроме чата */
+}
+
+html, body {
+    width: 100%;
+    height: 100%;
+    height: 100dvh;
+    overflow: hidden;
+    font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+    background-color: #FFCC00; /* Желтый фон при старте */
+}
+
+/* 🌟 Анимация Заставки */
+#intro-screen {
+    position: fixed;
+    top: 0; left: 0;
+    width: 100%; height: 100%;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    z-index: 999;
+}
+
+#logo {
+    display: flex;
+    font-size: 3rem;
+    font-weight: 900;
+    text-shadow: 2px 2px 4px rgba(0,0,0,0.3);
+}
+
+#logo span {
+    display: inline-block;
+    animation: fallAnim 5s forwards;
+    animation-delay: calc(var(--i) * 0.05s);
+}
+
+@keyframes fallAnim {
+    0% { opacity: 0; transform: translateY(-100px); }
+    40% { opacity: 1; transform: translateY(0); } /* 2 сек появление */
+    60% { opacity: 1; transform: translateY(0); } /* 1 сек стоит */
+    100% { opacity: 0; transform: translateY(800px) rotate(45deg); } /* 2 сек падает */
+}
+
+/* 🪟 Windows Vista UI */
+#app {
+    width: 100%;
+    height: 100%;
+    height: 100dvh;
+    background: linear-gradient(135deg, #a1c4fd 0%, #c2e9fb 100%);
+    display: flex;
+    flex-direction: column;
+    opacity: 0;
+    transition: opacity 1s ease;
+}
+
+#app.visible {
+    opacity: 1;
+}
+
+.hidden { display: none !important; }
+
+/* Vista Buttons */
+.vista-nav {
+    display: flex;
+    background: linear-gradient(to bottom, #4c688b 0%, #324a68 50%, #20334c 51%, #2c425d 100%);
+    padding: 6px;
+    gap: 4px;
+    box-shadow: 0 2px 5px rgba(0,0,0,0.4);
+}
+
+.vista-btn {
+    flex: 1;
+    padding: 8px 4px;
+    font-size: 0.85rem;
+    font-weight: bold;
+    color: white;
+    background: linear-gradient(to bottom, rgba(255,255,255,0.4) 0%, rgba(255,255,255,0.1) 50%, rgba(0,0,0,0.1) 51%, rgba(255,255,255,0.2) 100%);
+    border: 1px solid #1d2a3a;
+    border-radius: 4px;
+    cursor: pointer;
+    text-shadow: 0 -1px 0 #000;
+    box-shadow: inset 0 1px 0 rgba(255,255,255,0.5);
+    text-align: center;
+}
+
+.vista-btn.active, .vista-btn:active {
+    background: linear-gradient(to bottom, #2d507b 0%, #4a75a0 100%);
+    border-color: #0d1825;
+}
+
+/* Windows Container */
+.vista-window {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    padding: 8px;
+    overflow: hidden;
+}
+
+.tab-content {
+    display: none;
+    height: 100%;
+    flex-direction: column;
+}
+
+.tab-content.active {
+    display: flex;
+}
+
+/* 💬 Чат */
+#chat-box {
+    flex: 1;
+    background: rgba(255, 255, 255, 0.85);
+    border: 1px solid #708090;
+    border-radius: 6px;
+    padding: 10px;
+    overflow-y: auto;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    user-select: text; /* Разрешено выделять и копировать ТОЛЬКО чат */
+    backdrop-filter: blur(5px);
+}
+
+.chat-msg {
+    background: #ffffff;
+    padding: 6px 10px;
+    border-radius: 6px;
+    border-left: 4px solid #007AFF;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+    font-size: 0.95rem;
+    word-break: break-word;
+}
+
+.chat-msg.bot {
+    border-left-color: #FF3B30;
+    background: #FFF5F5;
+}
+
+.chat-msg .bot-badge {
+    background: #FF3B30;
+    color: white;
+    font-size: 0.65rem;
+    padding: 1px 4px;
+    border-radius: 3px;
+    margin-right: 4px;
+}
+
+.chat-link {
+    color: #007AFF;
+    font-weight: bold;
+    text-decoration: underline;
+}
+
+.chat-controls {
+    display: flex;
+    gap: 6px;
+    margin-top: 8px;
+}
+
+#msg-input {
+    flex: 1;
+    padding: 10px;
+    border-radius: 4px;
+    border: 1px solid #708090;
+    outline: none;
+    font-size: 1rem;
+    user-select: text;
+}
+
+/* Карточки Вкладок */
+.vista-card {
+    background: rgba(255, 255, 255, 0.9);
+    padding: 15px;
+    border-radius: 6px;
+    border: 1px solid #708090;
+    box-shadow: 0 4px 10px rgba(0,0,0,0.15);
+}
+
+.vista-card h2 { margin-bottom: 10px; font-size: 1.2rem; color: #1d2a3a; }
+.vista-card p { margin-bottom: 8px; font-size: 0.95rem; }
+.vista-card ul { margin-left: 20px; margin-bottom: 10px; }
+.vista-card li { margin-bottom: 5px; }
+
+.btn-inline {
+    margin-top: 5px;
+    padding: 4px 8px;
+}

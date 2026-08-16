@@ -1,0 +1,99 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+    <title>Простоквашино</title>
+    <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+
+    <!-- 🌟 Заставка Простоквашино -->
+    <div id="intro-screen">
+        <div id="logo">
+            <span style="color:#FF3B30; --i:1">П</span>
+            <span style="color:#FF9500; --i:2">р</span>
+            <span style="color:#FFCC00; --i:3">о</span>
+            <span style="color:#4CD964; --i:4">с</span>
+            <span style="color:#5AC8FA; --i:5">т</span>
+            <span style="color:#007AFF; --i:6">о</span>
+            <span style="color:#5856D6; --i:7">к</span>
+            <span style="color:#FF2D55; --i:8">в</span>
+            <span style="color:#FF9500; --i:9">а</span>
+            <span style="color:#4CD964; --i:10">ш</span>
+            <span style="color:#007AFF; --i:11">и</span>
+            <span style="color:#FF3B30; --i:12">н</span>
+            <span style="color:#5AC8FA; --i:13">о</span>
+        </div>
+    </div>
+
+    <!-- 🪟 Windows Vista Главная Панель -->
+    <div id="app" class="hidden">
+        <nav class="vista-nav">
+            <button class="vista-btn active" onclick="switchTab('chat')">💬 Общий чат</button>
+            <button class="vista-btn" onclick="switchTab('rules')">📜 Правила</button>
+            <button class="vista-btn" onclick="switchTab('profile')">👤 Профиль</button>
+            <button class="vista-btn" onclick="switchTab('shop')">🛒 Магазин</button>
+        </nav>
+
+        <main class="vista-window">
+            <!-- Вкладка 1: Чат -->
+            <section id="tab-chat" class="tab-content active">
+                <div id="chat-box"></div>
+                <div class="chat-controls">
+                    <input type="text" id="msg-input" placeholder="Напишите сообщение..." maxlength="200" autocomplete="off">
+                    <button class="vista-btn action-btn" onclick="sendMessage()">Отправить</button>
+                </div>
+            </section>
+
+            <!-- Вкладка 2: Правила -->
+            <section id="tab-rules" class="tab-content">
+                <div class="vista-card">
+                    <h2>📜 Правила чата</h2>
+                    <ul>
+                        <li>🚫 <b>Призыв в ЛС запрещен!</b></li>
+                        <li>🔗 <b>Любые ссылки запрещены!</b></li>
+                        <li>🤬 <b>Маты запрещены!</b></li>
+                        <li>📢 <b>Спам и флуд запрещены!</b></li>
+                    </ul>
+                    <p class="bot-note">Модератор <b>Харест BOT</b> следит за чатом 24/7 и удаляет нарушения мгновенно.</p>
+                </div>
+            </section>
+
+            <!-- Вкладка 3: Профиль -->
+            <section id="tab-profile" class="tab-content">
+                <div class="vista-card">
+                    <h2>👤 Ваш профиль</h2>
+                    <p><b>Ваш Ник:</b> <span id="prof-nick">...</span></p>
+                    <p><b>Дата первого захода:</b> <span id="prof-date">...</span></p>
+                    <p><b>IP адрес:</b> <span id="prof-ip">Скрыт (Записан в БД)</span></p>
+                    <p><i>Напишите в чат команда "сменить ник" для генерации нового!</i></p>
+                </div>
+            </section>
+
+            <!-- Вкладка 4: Магазин -->
+            <section id="tab-shop" class="tab-content">
+                <div class="vista-card">
+                    <h2>🛒 Магазин</h2>
+                    <p>На самом деле <b>никакого магазина нет</b>! Но вы можете бесплатно получить префикс и цвет ника за активность!</p>
+                    <hr class="vista-divider">
+                    <p><b>Условие:</b> 50 сообщений в день в течение 3-х дней (без спама).</p>
+                    <p><small>⚠️ Если вы будете 2 дня неактивны — награда пропадет!</small></p>
+
+                    <div id="reward-section" class="hidden">
+                        <h3>🎁 Настройка награды</h3>
+                        <label>Префикс (макс. 8 симв.):</label>
+                        <input type="text" id="pref-input" maxlength="8" placeholder="[VIP]">
+                        <label>Цвет ника:</label>
+                        <input type="color" id="color-input" value="#007AFF">
+                        <button class="vista-btn" onclick="saveCustomization()">Сохранить</button>
+                    </div>
+                </div>
+            </section>
+        </main>
+    </div>
+
+    <script src="/socket.io/socket.io.js"></script>
+    <script src="script.js"></script>
+</body>
+</html>
