@@ -12,23 +12,28 @@ const io = new Server(server, {
 
 app.set('trust proxy', 1);
 
-// 🛡️ Защита от DDoS и спама на уровне HTTP
+// 🛡️ Защита от DDoS и спама
 const limiter = rateLimit({
-    windowMs: 1 * 60 * 1000, // 1 минута
-    max: 100, // макс 100 запросов с IP
+    windowMs: 1 * 60 * 1000,
+    max: 100,
     message: "Слишком много запросов, подождите."
 });
 app.use(limiter);
 
-app.use(express.static(path.join(__dirname, 'public')));
+// 📂 Раздаем файлы ПРЯМО из текущей папки (без папки public)
+app.use(express.static(__dirname));
+
+// 🏠 Главная страница
+app.get('/', (req, res) => {
+    res.sendFile(path.join(__dirname, 'index.html'));
+});
 
 // 📝 База данных в памяти
-const messageHistory = []; // Хранит максимум 30 сообщений
-const usersByIp = {}; // IP -> User Profile
+const messageHistory = [];
+const usersByIp = {};
 const usedNicks = new Set();
 let onlineCount = 0;
 
-// Генератор ников
 const prefixes = ["Зайчик", "Цыпленок", "Бабка", "Мамка", "ДядяФедор", "Матроскин", "Шарик", "Печкин", "Колобок", "Ежик", "Лис", "Совенок", "Волк", "Тигренок"];
 function generateUniqueNick(baseNick = null) {
     let name = baseNick || prefixes[Math.floor(Math.random() * prefixes.length)];
@@ -45,14 +50,12 @@ function generateUniqueNick(baseNick = null) {
     return finalNick;
 }
 
-// Плохие слова для модерации
 const BANNED_WORDS = ["блят", "хуй", "пизд", "ебат", "сука", "чмо", "гной", "http", "https", "t.me", ".com", ".ru", "в лс", "пиши в лс"];
 
 io.on('connection', (socket) => {
     onlineCount++;
     const clientIp = socket.handshake.headers['x-forwarded-for'] || socket.handshake.address;
 
-    // Авторизация/Инициализация по IP
     if (!usersByIp[clientIp]) {
         usersByIp[clientIp] = {
             ip: clientIp,
@@ -72,13 +75,11 @@ io.on('connection', (socket) => {
     socket.emit('load_history', messageHistory.slice(-30));
     io.emit('online_update', onlineCount);
 
-    // 📩 Обработка сообщений
     socket.on('send_message', (text) => {
         if (!text || typeof text !== 'string') return;
         text = text.trim();
         if (text.length === 0 || text.length > 200) return;
 
-        // --- Обработка команд ---
         if (text.toLowerCase() === 'стата') {
             socket.emit('bot_message', { text: `📊 Сейчас на сайте пользователей: ${onlineCount}` });
             return;
@@ -98,7 +99,6 @@ io.on('connection', (socket) => {
             return;
         }
 
-        // --- Модерация Харестом ---
         const lowerText = text.toLowerCase();
         const isViolated = BANNED_WORDS.some(word => lowerText.includes(word));
 
@@ -110,11 +110,10 @@ io.on('connection', (socket) => {
             return;
         }
 
-        // Подсчет активности
         const today = new Date().toDateString();
         if (user.lastActiveDay !== today) {
             if (user.todayMessages >= 50) user.activeDays++;
-            else user.activeDays = 0; // Сброс при неактивности
+            else user.activeDays = 0;
             user.todayMessages = 0;
             user.lastActiveDay = today;
         }
@@ -124,7 +123,6 @@ io.on('connection', (socket) => {
             socket.emit('bot_message', { text: `🎉 Вы проявили активность 3 дня! Вам доступна награда в Магазине!` });
         }
 
-        // Создание и сохранение сообщения
         const msgData = {
             id: Date.now(),
             sender: user.nick,
@@ -141,7 +139,6 @@ io.on('connection', (socket) => {
         io.emit('new_message', msgData);
     });
 
-    // Обновление префикса/цвета из магазина
     socket.on('update_customization', ({ prefix, color }) => {
         if (!user.rewardEligible) return;
         if (prefix && prefix.length <= 8) user.prefix = prefix.trim();
@@ -155,7 +152,6 @@ io.on('connection', (socket) => {
     });
 });
 
-// 🤖 Рекламный Бот "Харест" каждые 1.30 мин (90000 мс)
 setInterval(() => {
     const botMsg = {
         id: Date.now(),
@@ -169,8 +165,7 @@ setInterval(() => {
     io.emit('new_message', botMsg);
 }, 90000);
 
-// Пинг-эндпоинт для предотвращения сна сервера
 app.get('/ping', (req, res) => res.send('pong'));
 
 const PORT = process.env.PORT || 3000;
-server.listen(PORT, () => console.log(`Server running on port ${PORT}`));
+server.listen(PORT, () => console.log(`Server running on http://localhost:${PORT}`));
