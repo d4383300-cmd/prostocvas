@@ -143,7 +143,7 @@ io.on('connection', (socket) => {
 
     // Ссылка для привязки Telegram через base64 IP
     const encodedIp = Buffer.from(clientIp).toString('base64');
-    const botUsername = "xurestv_bot"; // Твой бот
+    const botUsername = "xurestbot_bot"; // Твой бот
     user.tgLink = `https://t.me/${botUsername}?start=${encodedIp}`;
 
     socket.emit('init_user', user);
