@@ -2,61 +2,72 @@
 <html lang="ru">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
-    <title>Простоквашино</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Простоквашино Чат</title>
     <link rel="stylesheet" href="styles.css">
 </head>
 <body>
 
-    <!-- 🌟 Заставка Простоквашино -->
+    <!-- 🌟 Заставка анимации -->
     <div id="intro-screen">
         <div id="logo">
-            <span style="color:#FF3B30; --i:1">П</span>
-            <span style="color:#FF9500; --i:2">р</span>
-            <span style="color:#FFCC00; --i:3">о</span>
-            <span style="color:#4CD964; --i:4">с</span>
-            <span style="color:#5AC8FA; --i:5">т</span>
-            <span style="color:#007AFF; --i:6">о</span>
-            <span style="color:#5856D6; --i:7">к</span>
-            <span style="color:#FF2D55; --i:8">в</span>
-            <span style="color:#FF9500; --i:9">а</span>
-            <span style="color:#4CD964; --i:10">ш</span>
-            <span style="color:#007AFF; --i:11">и</span>
-            <span style="color:#FF3B30; --i:12">н</span>
-            <span style="color:#5AC8FA; --i:13">о</span>
+            <span style="--i:1; color:#007AFF;">П</span>
+            <span style="--i:2; color:#34C759;">р</span>
+            <span style="--i:3; color:#FF9500;">о</span>
+            <span style="--i:4; color:#AF52DE;">с</span>
+            <span style="--i:5; color:#FF2D55;">т</span>
+            <span style="--i:6; color:#5856D6;">о</span>
+            <span style="--i:7; color:#007AFF;">к</span>
+            <span style="--i:8; color:#34C759;">в</span>
+            <span style="--i:9; color:#FF9500;">а</span>
+            <span style="--i:10; color:#AF52DE;">ш</span>
+            <span style="--i:11; color:#FF2D55;">и</span>
+            <span style="--i:12; color:#5856D6;">н</span>
+            <span style="--i:13; color:#007AFF;">о</span>
         </div>
     </div>
 
-    <!-- 🪟 Windows Vista Главная Панель -->
+    <!-- 🪟 Интерфейс Windows Vista -->
     <div id="app" class="hidden">
+        
+        <!-- Навигационные вкладки -->
         <nav class="vista-nav">
-            <button class="vista-btn active" onclick="switchTab('chat')">💬 Общий чат</button>
-            <button class="vista-btn" onclick="switchTab('rules')">📜 Правила</button>
-            <button class="vista-btn" onclick="switchTab('profile')">👤 Профиль</button>
+            <button class="vista-btn active" onclick="switchTab('chat')">💬 Чат</button>
             <button class="vista-btn" onclick="switchTab('shop')">🛒 Магазин</button>
+            <button class="vista-btn" onclick="switchTab('profile')">👤 Профиль</button>
+            <button class="vista-btn" onclick="switchTab('rules')">📜 Правила</button>
         </nav>
 
+        <!-- Главный контейнер окон -->
         <main class="vista-window">
+            
             <!-- Вкладка 1: Чат -->
             <section id="tab-chat" class="tab-content active">
                 <div id="chat-box"></div>
                 <div class="chat-controls">
                     <input type="text" id="msg-input" placeholder="Напишите сообщение..." maxlength="200" autocomplete="off">
-                    <button class="vista-btn action-btn" onclick="sendMessage()">Отправить</button>
+                    <button class="vista-btn" onclick="sendMessage()">Отправить</button>
                 </div>
             </section>
 
-            <!-- Вкладка 2: Правила -->
-            <section id="tab-rules" class="tab-content">
+            <!-- Вкладка 2: Магазин -->
+            <section id="tab-shop" class="tab-content">
                 <div class="vista-card">
-                    <h2>📜 Правила чата</h2>
-                    <ul>
-                        <li>🚫 <b>Призыв в ЛС запрещен!</b></li>
-                        <li>🔗 <b>Любые ссылки запрещены!</b></li>
-                        <li>🤬 <b>Маты запрещены!</b></li>
-                        <li>📢 <b>Спам и флуд запрещены!</b></li>
-                    </ul>
-                    <p class="bot-note">Модератор <b>Харест BOT</b> следит за чатом 24/7 и удаляет нарушения мгновенно.</p>
+                    <h2>🛒 Магазин кастомизации</h2>
+                    <p>Проявляйте активность на сайте 3 дня подряд (от 50 сообщений в день), чтобы разблокировать смену цвета и префикса!</p>
+                    
+                    <div id="reward-section" class="hidden">
+                        <hr style="margin: 10px 0; border: 0; border-top: 1px solid #708090;">
+                        <h3>🎉 Награда разблокирована!</h3>
+                        <br>
+                        <label><b>Ваш префикс (до 8 символов):</b></label><br>
+                        <input type="text" id="pref-input" placeholder="Например: VIP" maxlength="8" style="width: 100%; padding: 6px; margin: 5px 0 10px 0;"><br>
+                        
+                        <label><b>Цвет ника и префикса:</b></label><br>
+                        <input type="color" id="color-input" value="#007AFF" style="width: 100%; height: 40px; border: none; cursor: pointer;"><br><br>
+                        
+                        <button class="vista-btn" onclick="saveCustomization()">Сохранить изменения</button>
+                    </div>
                 </div>
             </section>
 
@@ -64,35 +75,34 @@
             <section id="tab-profile" class="tab-content">
                 <div class="vista-card">
                     <h2>👤 Ваш профиль</h2>
-                    <p><b>Ваш Ник:</b> <span id="prof-nick">...</span></p>
+                    <p><b>Ваш Ник:</b> <span id="prof-nick">...</span> <span id="prof-badge"></span></p>
                     <p><b>Дата первого захода:</b> <span id="prof-date">...</span></p>
-                    <p><b>IP адрес:</b> <span id="prof-ip">Скрыт (Записан в БД)</span></p>
-                    <p><i>Напишите в чат команда "сменить ник" для генерации нового!</i></p>
+                    <p><b>Статус аккаунта:</b> <span id="prof-status">Не верифицирован</span></p>
+                    <hr style="margin: 12px 0; border: 0; border-top: 1px solid #708090;">
+                    
+                    <a id="tg-bind-btn" href="#" target="_blank" class="vista-btn" style="display: block; text-decoration: none; text-align: center; padding: 10px; background: linear-gradient(to bottom, #2b78c5 0%, #1a518b 100%);">
+                        ✈️ Привязать аккаунт к Telegram
+                    </a>
                 </div>
             </section>
 
-            <!-- Вкладка 4: Магазин -->
-            <section id="tab-shop" class="tab-content">
+            <!-- Вкладка 4: Правила -->
+            <section id="tab-rules" class="tab-content">
                 <div class="vista-card">
-                    <h2>🛒 Магазин</h2>
-                    <p>На самом деле <b>никакого магазина нет</b>! Но вы можете бесплатно получить префикс и цвет ника за активность!</p>
-                    <hr class="vista-divider">
-                    <p><b>Условие:</b> 50 сообщений в день в течение 3-х дней (без спама).</p>
-                    <p><small>⚠️ Если вы будете 2 дня неактивны — награда пропадет!</small></p>
-
-                    <div id="reward-section" class="hidden">
-                        <h3>🎁 Настройка награды</h3>
-                        <label>Префикс (макс. 8 симв.):</label>
-                        <input type="text" id="pref-input" maxlength="8" placeholder="[VIP]">
-                        <label>Цвет ника:</label>
-                        <input type="color" id="color-input" value="#007AFF">
-                        <button class="vista-btn" onclick="saveCustomization()">Сохранить</button>
-                    </div>
+                    <h2>📜 Правила чата Простоквашино</h2>
+                    <ul>
+                        <li><b>1.</b> Запрещено призывать пользователей писать в ЛС.</li>
+                        <li><b>2.</b> Публикация любых сторонних ссылок запрещена.</li>
+                        <li><b>3.</b> Спам (более 3 сообщений за 4 секунды) строго блокируется.</li>
+                        <li><b>4.</b> Запрещен открытый мат. (Система фильтрации автоматически заменяет его на ####).</li>
+                    </ul>
                 </div>
             </section>
+
         </main>
     </div>
 
+    <!-- Подключение библиотек и скриптов -->
     <script src="/socket.io/socket.io.js"></script>
     <script src="script.js"></script>
 </body>
