@@ -1,171 +1,162 @@
-const express = require('express');
-const http = require('http');
-const { Server } = require('socket.io');
-const rateLimit = require('express-rate-limit');
-const path = require('path');
+const socket = io();
+let currentUser = null;
 
-const app = express();
-const server = http.createServer(app);
-const io = new Server(server, {
-    cors: { origin: "*" }
-});
+// 🔊 Безопасный звук (не ломает сайт, если браузер заблокировал аудио)
+function playSound(type) {
+    try {
+        const AudioContext = window.AudioContext || window.webkitAudioContext;
+        if (!AudioContext) return;
+        const ctx = new AudioContext();
+        if (ctx.state === 'suspended') return; // Не играем, если браузер не разрешил
 
-app.set('trust proxy', 1);
+        const osc = ctx.createOscillator();
+        const gain = ctx.createGain();
+        osc.connect(gain);
+        gain.connect(ctx.destination);
 
-// 🛡️ Защита от DDoS и спама
-const limiter = rateLimit({
-    windowMs: 1 * 60 * 1000,
-    max: 100,
-    message: "Слишком много запросов, подождите."
-});
-app.use(limiter);
-
-// 📂 Раздаем файлы ПРЯМО из текущей папки (без папки public)
-app.use(express.static(__dirname));
-
-// 🏠 Главная страница
-app.get('/', (req, res) => {
-    res.sendFile(path.join(__dirname, 'index.html'));
-});
-
-// 📝 База данных в памяти
-const messageHistory = [];
-const usersByIp = {};
-const usedNicks = new Set();
-let onlineCount = 0;
-
-const prefixes = ["Зайчик", "Цыпленок", "Бабка", "Мамка", "ДядяФедор", "Матроскин", "Шарик", "Печкин", "Колобок", "Ежик", "Лис", "Совенок", "Волк", "Тигренок"];
-function generateUniqueNick(baseNick = null) {
-    let name = baseNick || prefixes[Math.floor(Math.random() * prefixes.length)];
-    if (!usedNicks.has(name)) {
-        usedNicks.add(name);
-        return name;
+        if (type === 'appear') {
+            osc.frequency.setValueAtTime(300, ctx.currentTime);
+            osc.frequency.exponentialRampToValueAtTime(800, ctx.currentTime + 0.3);
+            gain.gain.setValueAtTime(0.1, ctx.currentTime);
+            gain.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + 0.3);
+            osc.start();
+            osc.stop(ctx.currentTime + 0.3);
+        } else if (type === 'fall') {
+            osc.frequency.setValueAtTime(600, ctx.currentTime);
+            osc.frequency.exponentialRampToValueAtTime(150, ctx.currentTime + 0.4);
+            gain.gain.setValueAtTime(0.1, ctx.currentTime);
+            gain.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + 0.4);
+            osc.start();
+            osc.stop(ctx.currentTime + 0.4);
+        }
+    } catch(e) {
+        // Игнорируем блокировки звука браузером
     }
-    let counter = 777;
-    while (usedNicks.has(`${name}${counter}`)) {
-        counter++;
-    }
-    const finalNick = `${name}${counter}`;
-    usedNicks.add(finalNick);
-    return finalNick;
 }
 
-const BANNED_WORDS = ["блят", "хуй", "пизд", "ебат", "сука", "чмо", "гной", "http", "https", "t.me", ".com", ".ru", "в лс", "пиши в лс"];
+// ⏱️ Надежный таймер перехода (5 секунд: 2сек появление - 1сек висит - 2сек падает)
+window.addEventListener('DOMContentLoaded', () => {
+    playSound('appear');
+    setTimeout(() => playSound('fall'), 3000);
 
-io.on('connection', (socket) => {
-    onlineCount++;
-    const clientIp = socket.handshake.headers['x-forwarded-for'] || socket.handshake.address;
+    setTimeout(() => {
+        const intro = document.getElementById('intro-screen');
+        const app = document.getElementById('app');
 
-    if (!usersByIp[clientIp]) {
-        usersByIp[clientIp] = {
-            ip: clientIp,
-            nick: generateUniqueNick(),
-            regDate: new Date().toLocaleDateString('ru-RU'),
-            prefix: '',
-            color: '#000000',
-            activeDays: 0,
-            todayMessages: 0,
-            lastActiveDay: new Date().toDateString(),
-            rewardEligible: false
-        };
-    }
-
-    const user = usersByIp[clientIp];
-    socket.emit('init_user', user);
-    socket.emit('load_history', messageHistory.slice(-30));
-    io.emit('online_update', onlineCount);
-
-    socket.on('send_message', (text) => {
-        if (!text || typeof text !== 'string') return;
-        text = text.trim();
-        if (text.length === 0 || text.length > 200) return;
-
-        if (text.toLowerCase() === 'стата') {
-            socket.emit('bot_message', { text: `📊 Сейчас на сайте пользователей: ${onlineCount}` });
-            return;
+        if (intro) intro.style.display = 'none';
+        if (app) {
+            app.classList.remove('hidden');
+            app.classList.add('visible');
         }
-        if (text.toLowerCase() === 'правила') {
-            socket.emit('bot_message', { 
-                text: `📜 **Правила:**\n1. Призыв в ЛС запрещен!\n2. Ссылки запрещены!\n3. Мат запрещен!\n4. Спам запрещен!`,
-                showRulesBtn: true
-            });
-            return;
-        }
-        if (text.toLowerCase() === 'сменить ник') {
-            usedNicks.delete(user.nick);
-            user.nick = generateUniqueNick();
-            socket.emit('user_updated', user);
-            socket.emit('bot_message', { text: `✅ Ваш новый никнейм: **${user.nick}**` });
-            return;
-        }
-
-        const lowerText = text.toLowerCase();
-        const isViolated = BANNED_WORDS.some(word => lowerText.includes(word));
-
-        if (isViolated) {
-            socket.emit('bot_message', { 
-                text: `⚠️ **${user.nick}**, не нарушай правила!`, 
-                showRulesBtn: true 
-            });
-            return;
-        }
-
-        const today = new Date().toDateString();
-        if (user.lastActiveDay !== today) {
-            if (user.todayMessages >= 50) user.activeDays++;
-            else user.activeDays = 0;
-            user.todayMessages = 0;
-            user.lastActiveDay = today;
-        }
-        user.todayMessages++;
-        if (user.activeDays >= 3 && !user.rewardEligible) {
-            user.rewardEligible = true;
-            socket.emit('bot_message', { text: `🎉 Вы проявили активность 3 дня! Вам доступна награда в Магазине!` });
-        }
-
-        const msgData = {
-            id: Date.now(),
-            sender: user.nick,
-            prefix: user.prefix,
-            color: user.color,
-            text: text,
-            time: new Date().toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' }),
-            isBot: false
-        };
-
-        messageHistory.push(msgData);
-        if (messageHistory.length > 30) messageHistory.shift();
-
-        io.emit('new_message', msgData);
-    });
-
-    socket.on('update_customization', ({ prefix, color }) => {
-        if (!user.rewardEligible) return;
-        if (prefix && prefix.length <= 8) user.prefix = prefix.trim();
-        if (color) user.color = color;
-        socket.emit('user_updated', user);
-    });
-
-    socket.on('disconnect', () => {
-        onlineCount = Math.max(0, onlineCount - 1);
-        io.emit('online_update', onlineCount);
-    });
+        document.body.style.backgroundColor = '#a1c4fd';
+    }, 5000);
 });
 
-setInterval(() => {
-    const botMsg = {
-        id: Date.now(),
-        sender: "Харест",
-        isBot: true,
-        text: 'Хочешь бесплатную мишку в Telegram? Заходи на канал <a href="https://t.me/xurestv" target="_blank" class="chat-link">@xurestv</a>',
-        time: new Date().toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' })
-    };
-    messageHistory.push(botMsg);
-    if (messageHistory.length > 30) messageHistory.shift();
-    io.emit('new_message', botMsg);
-}, 90000);
+// 🔄 Переключение вкладок
+function switchTab(tabName) {
+    document.querySelectorAll('.tab-content').forEach(el => el.classList.remove('active'));
+    document.querySelectorAll('.vista-nav .vista-btn').forEach(el => el.classList.remove('active'));
+    
+    const targetTab = document.getElementById(`tab-${tabName}`);
+    if (targetTab) targetTab.classList.add('active');
+    
+    if (event && event.target) {
+        event.target.classList.add('active');
+    }
+}
 
-app.get('/ping', (req, res) => res.send('pong'));
+// 💬 Socket.IO логика
+socket.on('init_user', (user) => {
+    currentUser = user;
+    const nickEl = document.getElementById('prof-nick');
+    const dateEl = document.getElementById('prof-date');
+    if (nickEl) nickEl.innerText = user.nick;
+    if (dateEl) dateEl.innerText = user.regDate;
+    
+    if (user.rewardEligible) {
+        const rewardSec = document.getElementById('reward-section');
+        if (rewardSec) rewardSec.classList.remove('hidden');
+    }
+});
 
-const PORT = process.env.PORT || 3000;
-server.listen(PORT, () => console.log(`Server running on http://localhost:${PORT}`));
+socket.on('user_updated', (user) => {
+    currentUser = user;
+    const nickEl = document.getElementById('prof-nick');
+    if (nickEl) nickEl.innerText = user.nick;
+});
+
+socket.on('load_history', (history) => {
+    const box = document.getElementById('chat-box');
+    if (!box) return;
+    box.innerHTML = '';
+    
+    const localSaved = JSON.parse(localStorage.getItem('local_chat') || '[]');
+    const combined = [...history, ...localSaved];
+    const uniqueMsgs = Array.from(new Map(combined.map(m => [m.id, m])).values());
+    
+    uniqueMsgs.forEach(renderMessage);
+    saveLocally(uniqueMsgs);
+});
+
+socket.on('new_message', (msg) => {
+    renderMessage(msg);
+    saveLocally([msg]);
+});
+
+socket.on('bot_message', (data) => {
+    const box = document.getElementById('chat-box');
+    if (!box) return;
+    const div = document.createElement('div');
+    div.className = 'chat-msg bot';
+    let content = `<span class="bot-badge">BOT</span><b>Харест:</b> ${data.text}`;
+    if (data.showRulesBtn) {
+        content += `<br><button class="vista-btn btn-inline" onclick="switchTab('rules')">Правила</button>`;
+    }
+    div.innerHTML = content;
+    box.appendChild(div);
+    box.scrollTop = box.scrollHeight;
+});
+
+function renderMessage(msg) {
+    const box = document.getElementById('chat-box');
+    if (!box) return;
+    const div = document.createElement('div');
+    div.className = `chat-msg ${msg.isBot ? 'bot' : ''}`;
+    
+    const prefixStr = msg.prefix ? `<span style="color:${msg.color}">[${msg.prefix}]</span> ` : '';
+    const nameStr = `<b style="color:${msg.color}">${msg.sender}</b>`;
+    const botBadge = msg.isBot ? `<span class="bot-badge">BOT</span>` : '';
+
+    div.innerHTML = `<small style="color:#666">[${msg.time}]</small> ${botBadge}${prefixStr}${nameStr}: ${msg.text}`;
+    box.appendChild(div);
+    box.scrollTop = box.scrollHeight;
+}
+
+function saveLocally(newMsgs) {
+    const existing = JSON.parse(localStorage.getItem('local_chat') || '[]');
+    const combined = [...existing, ...newMsgs];
+    const unique = Array.from(new Map(combined.map(m => [m.id, m])).values());
+    localStorage.setItem('local_chat', JSON.stringify(unique.slice(-100)));
+}
+
+function sendMessage() {
+    const input = document.getElementById('msg-input');
+    if (input && input.value.trim()) {
+        socket.emit('send_message', input.value);
+        input.value = '';
+    }
+}
+
+const inputEl = document.getElementById('msg-input');
+if (inputEl) {
+    inputEl.addEventListener('keypress', (e) => {
+        if (e.key === 'Enter') sendMessage();
+    });
+}
+
+function saveCustomization() {
+    const prefix = document.getElementById('pref-input').value;
+    const color = document.getElementById('color-input').value;
+    socket.emit('update_customization', { prefix, color });
+    alert('Настройки сохранены!');
+}
