@@ -5,9 +5,13 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
     <title>3D Кинотеатр</title>
     <style>
-        * { box-sizing: border-box; }
-        body, html { margin: 0; padding: 0; width: 100%; height: 100%; overflow: hidden; background: #000; font-family: 'Segoe UI', Arial, sans-serif; }
-        #canvas3d { width: 100vw; height: 100vh; display: block; cursor: pointer; }
+        * { box-sizing: border-box; touch-action: none; }
+        body, html { margin: 0; padding: 0; width: 100%; height: 100%; overflow: hidden; background: #000; font-family: sans-serif; }
+        
+        #css3d, #webgl {
+            position: absolute; top: 0; left: 0; width: 100%; height: 100%;
+        }
+        #css3d { pointer-events: none; }
 
         #crosshair {
             position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%);
@@ -17,16 +21,15 @@
 
         #hint {
             position: fixed; top: 10px; left: 10px; color: #fff;
-            background: rgba(0,0,0,0.6); padding: 8px 12px; border-radius: 6px;
-            pointer-events: none; font-size: 11px; z-index: 10; border: 1px solid #333;
+            background: rgba(0,0,0,0.6); padding: 8px; border-radius: 6px;
+            pointer-events: none; font-size: 11px; z-index: 10;
         }
 
         #videoModal {
             display: none; position: fixed; top: 50%; left: 50%;
             transform: translate(-50%, -50%); background: #141416;
             padding: 16px; border-radius: 10px; border: 1px solid #ff0055;
-            z-index: 100; text-align: center; color: white; width: 90%; max-width: 380px;
-            box-shadow: 0 0 20px rgba(255,0,85,0.3);
+            z-index: 100; text-align: center; color: white; width: 90%; max-width: 360px;
         }
         #videoModal input {
             width: 100%; padding: 10px; margin: 10px 0; border-radius: 5px;
@@ -34,20 +37,20 @@
         }
         #videoModal button {
             padding: 8px 18px; background: #ff0055; color: white;
-            border: none; border-radius: 5px; cursor: pointer; font-weight: bold; font-size: 12px;
+            border: none; border-radius: 5px; cursor: pointer; font-weight: bold;
         }
 
         #chatContainer {
-            position: fixed; bottom: 15px; left: 15px; width: 260px;
-            z-index: 10; pointer-events: none;
+            position: fixed; bottom: 20px; left: 20px; width: 240px;
+            z-index: 20; pointer-events: none;
         }
         #chatHistory {
-            height: 120px; overflow-y: auto; display: flex; flex-direction: column;
-            gap: 4px; margin-bottom: 8px; text-shadow: 0 1px 2px #000;
+            height: 100px; overflow-y: auto; display: flex; flex-direction: column;
+            gap: 4px; margin-bottom: 6px;
         }
         .chat-msg {
             background: rgba(0, 0, 0, 0.6); padding: 4px 8px; border-radius: 4px;
-            color: #fff; font-size: 11px; word-break: break-word; width: fit-content; max-width: 100%;
+            color: #fff; font-size: 11px; width: fit-content; max-width: 100%;
         }
         .chat-msg b { color: #ff3366; }
         #chatInput {
@@ -55,40 +58,54 @@
             background: rgba(0, 0, 0, 0.85); color: #fff; outline: none; pointer-events: auto; display: none; font-size: 12px;
         }
 
-        /* Видео-контейнеры для генерации текстур */
-        #mediaOverlay {
-            position: fixed; top: -9999px; left: -9999px; visibility: hidden;
+        /* ЭЛЕМЕНТЫ УПРАВЛЕНИЯ ДЛЯ ТЕЛЕФОНОВ */
+        .mobile-btn {
+            position: fixed; z-index: 30; background: rgba(255,0,85,0.6); color: white;
+            border: none; border-radius: 50%; width: 50px; height: 50px; font-size: 18px;
+            display: flex; align-items: center; justify-content: center;
+        }
+        #btnChat { bottom: 20px; right: 20px; }
+        #btnVideo { bottom: 80px; right: 20px; }
+        
+        #joystickZone {
+            position: fixed; bottom: 20px; left: 20px; width: 100px; height: 100px;
+            background: rgba(255,255,255,0.1); border-radius: 50%; z-index: 30; display: none;
+        }
+        #joystickKnob {
+            position: absolute; top: 30px; left: 30px; width: 40px; height: 40px;
+            background: rgba(255,0,85,0.8); border-radius: 50%;
         }
     </style>
     <script src="https://telegram.org/js/telegram-web-app.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/renderers/CSS3DRenderer.js"></script>
     <script src="/socket.io/socket.io.js"></script>
 </head>
 <body>
 
     <div id="crosshair"></div>
     <div id="hint">
-        🖱️ <b>Клик</b> — Захват мыши | ⌨️ <b>WASD</b> — Движение | 💬 <b>Enter</b> — Чат | 🎬 <b>T</b> — Вставить ссылку
+        💻 <b>ПК:</b> Клик — Мышь | <b>WASD</b> — Движение | <b>T</b> — Ссылка | <b>Enter</b> — Чат<br>
+        📱 <b>Тел:</b> Используйте кнопки справа и сенсорный экран
     </div>
 
     <div id="videoModal">
         <h4 style="margin: 0 0 8px 0;">Вставить видео</h4>
-        <p style="font-size: 10px; color: #aaa; margin: 0;">YouTube, VK, RuTube, Direct MP4</p>
-        <input type="text" id="videoUrlInput" placeholder="https://...">
-        <button onclick="submitVideoUrl()">Запустить для всех</button>
+        <input type="text" id="videoUrlInput" placeholder="Ссылка на YouTube, VK, RuTube">
+        <button onclick="submitVideoUrl()">Запустить</button>
     </div>
 
     <div id="chatContainer">
         <div id="chatHistory"></div>
-        <input type="text" id="chatInput" placeholder="Нажмите Enter..." maxlength="80">
+        <input type="text" id="chatInput" placeholder="Сообщение..." maxlength="80">
     </div>
 
-    <div id="mediaOverlay">
-        <video id="htmlVideo" crossorigin="anonymous" playsinline style="width:640px;height:360px;"></video>
-        <iframe id="iframeVideo" width="640" height="360" allow="autoplay"></iframe>
-    </div>
+    <button class="mobile-btn" id="btnChat">💬</button>
+    <button class="mobile-btn" id="btnVideo">🎬</button>
+    <div id="joystickZone"><div id="joystickKnob"></div></div>
 
-    <canvas id="canvas3d"></canvas>
+    <div id="webgl"></div>
+    <div id="css3d"></div>
 
     <script src="app.js"></script>
 </body>
