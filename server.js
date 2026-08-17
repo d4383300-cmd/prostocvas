@@ -1,155 +1,142 @@
+const TelegramBot = require('node-telegram-bot-api');
 const express = require('express');
 const http = require('http');
 const WebSocket = require('ws');
 const path = require('path');
-const sqlite3 = require('sqlite3').verbose();
-const TelegramBot = require('node-telegram-bot-api');
+
+const BOT_TOKEN = '8161722600:AAEef8zTPXRw7-fPgkHdkVX1pQqan7I5snY';
+const TARGET_CHAT_ID = '-1004486534339';
 
 const app = express();
 const server = http.createServer(app);
 const wss = new WebSocket.Server({ server });
 
-// Инициализация SQLite базы «Прослушки»
-const db = new sqlite3.Database('./proslushka.db', (err) => {
-  if (!err) {
-    db.run(`CREATE TABLE IF NOT EXISTS messages (
-      id INTEGER PRIMARY KEY AUTOINCREMENT,
-      nick TEXT,
-      text TEXT,
-      timestamp DATETIME DEFAULT CURRENT_TIMESTAMP
-    )`);
-  }
-});
+const bot = new TelegramBot(BOT_TOKEN, { polling: true });
 
-// Telegram Бот (укажите ваш токен при необходимости)
-const TELEGRAM_TOKEN = process.env.TELEGRAM_TOKEN || '';
-let bot = null;
-if (TELEGRAM_TOKEN) {
-  bot = new TelegramBot(TELEGRAM_TOKEN, { polling: true });
-}
+// База данных в памяти (для прод-среды рекомендуется SQLite/MongoDB)
+const users = {}; // userId: { ip, games, wins, losses, username }
+const duels = {}; // duelId: { player1, player2, status, state }
 
 app.use(express.static(path.join(__dirname, 'public')));
+app.set('trust proxy', true);
 
-// 3D Комната и 8 Мест
-const MAX_SEATS = 8;
-const seats = new Array(MAX_SEATS).fill(null);
-const playersIn3D = {};
-let clientCounter = 0;
-
-wss.on('connection', (ws) => {
-  ws.id = ++clientCounter;
-
-  ws.on('message', (message) => {
-    try {
-      const data = JSON.parse(message);
-
-      // Логика чата
-      if (data.type === 'chat') {
-        const timeStr = new Date().toLocaleTimeString();
-
-        // Сохранение в базу Прослушки
-        db.run(`INSERT INTO messages (nick, text) VALUES (?, ?)`, [data.nick, data.text]);
-
-        // Команда /camera
-        if (data.text.trim() === '/camera') {
-          broadcast({ type: 'chat', nick: '🤖 БОТ', text: '📸 Запрашиваю снимок камеры...' });
-          requestCameraPhoto();
-          return;
-        }
-
-        broadcast({
-          type: 'chat',
-          nick: data.nick,
-          text: data.text,
-          time: timeStr
-        });
-      }
-
-      // Логика 3D
-      if (data.type === 'enter_3d') {
-        let seatIdx = seats.findIndex(s => s === null);
-        if (seatIdx === -1) {
-          ws.send(JSON.stringify({ type: 'room_full' }));
-          return;
-        }
-        seats[seatIdx] = ws.id;
-        playersIn3D[ws.id] = { nick: data.nick, seat: seatIdx, rotY: 0, rotX: 0 };
-        
-        ws.send(JSON.stringify({ type: 'assigned_seat', seat: seatIdx }));
-        sync3DPlayers();
-      }
-
-      if (data.type === 'look' && playersIn3D[ws.id]) {
-        playersIn3D[ws.id].rotY = data.rotY;
-        playersIn3D[ws.id].rotX = data.rotX;
-        sync3DPlayers();
-      }
-
-      if (data.type === 'exit_3d') {
-        leave3D(ws.id);
-      }
-
-      // Приём изображения от клиента и отсыпка в Telegram
-      if (data.type === 'camera_snapshot' && data.image) {
-        if (bot) {
-          const base64Data = data.image.replace(/^data:image\/jpeg;base64,/, "");
-          const imgBuffer = Buffer.from(base64Data, 'base64');
-          // Если есть chat_id, бота отправляет фото
-        }
-      }
-
-    } catch (err) {
-      console.error(err);
+// Регистрация IP через ЛС
+app.get('/auth', (req, res) => {
+    const { userId } = req.query;
+    const clientIp = req.headers['x-forwarded-for'] || req.socket.remoteAddress;
+    
+    if (userId && users[userId]) {
+        users[userId].ip = clientIp;
+        return res.send('<h1>Аккаунт и IP успешно привязаны! Можете вернуться в Telegram.</h1>');
     }
-  });
-
-  ws.on('close', () => {
-    leave3D(ws.id);
-  });
+    res.status(400).send('Ошибка авторизации.');
 });
 
-function leave3D(id) {
-  if (playersIn3D[id]) {
-    const s = playersIn3D[id].seat;
-    if (s !== undefined) seats[s] = null;
-    delete playersIn3D[id];
-    sync3DPlayers();
-  }
-}
+// Telegram Bot Logic
+bot.onText(/\/start/, (msg) => {
+    const userId = msg.from.id;
+    if (!users[userId]) {
+        users[userId] = { ip: null, games: 0, wins: 0, losses: 0, username: msg.from.username || msg.from.first_name };
+    }
+    
+    const opts = {
+        reply_markup: {
+            keyboard: [
+                [{ text: '👤 Профиль' }, { text: '🔓 Отвязать IP' }]
+            ],
+            resize_keyboard: true
+        }
+    };
+    bot.sendMessage(msg.chat.id, 'Добро пожаловать в проект **Харест**!', opts);
+});
 
-function broadcast(data) {
-  const msg = JSON.stringify(data);
-  wss.clients.forEach(c => {
-    if (c.readyState === WebSocket.OPEN) c.send(msg);
-  });
-}
+bot.on('message', (msg) => {
+    const userId = msg.from.id;
+    if (!users[userId]) {
+        users[userId] = { ip: null, games: 0, wins: 0, losses: 0, username: msg.from.username || msg.from.first_name };
+    }
 
-function sync3DPlayers() {
-  broadcast({ type: 'players_sync', players: playersIn3D });
-}
+    if (msg.text === '👤 Профиль') {
+        const u = users[userId];
+        bot.sendMessage(msg.chat.id, `📊 **Ваш профиль:**\n\nИгр: ${u.games}\nПобед: ${u.wins}\nПоражений: ${u.losses}\nIP: ${u.ip ? 'Привязан' : 'Не привязан'}`);
+    } else if (msg.text === '🔓 Отвязать IP') {
+        users[userId].ip = null;
+        bot.sendMessage(msg.chat.id, '✅ Ваш IP успешно сброшен. При новой игре потребуется повторная привязка.');
+    }
+});
 
-function requestCameraPhoto() {
-  const clients = Array.from(wss.clients).filter(c => playersIn3D[c.id]);
-  if (clients.length > 0) {
-    clients[0].send(JSON.stringify({ type: 'request_photo' }));
-  }
-}
+// Команда .дуэль
+bot.onText(/^\.дуэль (.+)/, (msg, match) => {
+    const challengerId = msg.from.id;
+    const targetInput = match[1].replace('@', '').trim();
 
-// Авто-рассылка бота раз в 1-5 минут
-function autoBotLoop() {
-  const delay = Math.floor(Math.random() * (300000 - 60000 + 1)) + 60000;
-  setTimeout(() => {
-    const count = Object.keys(playersIn3D).length;
-    broadcast({
-      type: 'chat',
-      nick: '🤖 БОТ-ПРОСЛУШКА',
-      text: `[АВТО-ОТЧЕТ] Игроков в 3D классе: ${count}/8. Напишите /camera для снимка!`
-    });
-    requestCameraPhoto();
-    autoBotLoop();
-  }, delay);
-}
-autoBotLoop();
+    if (!users[challengerId] || !users[challengerId].ip) {
+        const authUrl = `https://${msg.headers?.host || 'your-render-app.onrender.com'}/auth?userId=${challengerId}`;
+        return bot.sendMessage(challengerId, `⚠️ Для участия в дуэлях привяжите IP по ссылке: ${authUrl}`);
+    }
+
+    // Поиск оппонента в памяти
+    let targetId = Object.keys(users).find(id => users[id].username === targetInput || id === targetInput);
+
+    if (!targetId) {
+        return bot.sendMessage(msg.chat.id, 'Пользователь не найден или еще не запускал бота.');
+    }
+
+    if (!users[targetId].ip) {
+        return bot.sendMessage(msg.chat.id, `@${users[targetId].username} еще не привязал IP! Бот выслал инструкцию в ЛС.`);
+    }
+
+    const duelId = `duel_${Date.now()}`;
+    duels[duelId] = {
+        p1: challengerId,
+        p2: targetId,
+        accepted: false,
+        active: true
+    };
+
+    const opts = {
+        reply_markup: {
+            inline_keyboard: [[
+                { text: 'Принять', callback_data: `accept_${duelId}` },
+                { text: 'Отклонить', callback_data: `decline_${duelId}` }
+            ]]
+        }
+    };
+
+    bot.sendMessage(msg.chat.id, `ЖДУ ПРИНЯТИЕ СОГЛАШЕНИЯ НА ДУЭЛЬ @${users[targetId].username || targetId}`, opts);
+
+    // Тайм-аут 2 минуты
+    setTimeout(() => {
+        if (duels[duelId] && !duels[duelId].accepted) {
+            delete duels[duelId];
+            bot.sendMessage(msg.chat.id, `⌛ Ссылка на дуэль для @${users[targetId].username} больше не действительна.`);
+        }
+    }, 120000);
+});
+
+// Обработка кнопок Принять/Отклонить
+bot.on('callback_query', (query) => {
+    const userId = query.from.id;
+    const [action, duelId] = query.data.split('_');
+    const duel = duels[duelId];
+
+    if (!duel) {
+        return bot.answerCallbackQuery(query.id, { text: 'Приглашение устарело.', show_alert: true });
+    }
+
+    if (userId.toString() !== duel.p2.toString()) {
+        return bot.answerCallbackQuery(query.id, { text: 'Эта кнопка не для вас!', show_alert: true });
+    }
+
+    if (action === 'accept') {
+        duel.accepted = true;
+        const gameLink = `https://${query.message.chat.host || 'your-app.onrender.com'}/game.html?duel=${duelId}`;
+        bot.sendMessage(query.message.chat.id, `Вот ваша ссылка на дуэль: ${gameLink} \nЖду вас в течении 2-х минут.`);
+    } else {
+        delete duels[duelId];
+        bot.sendMessage(query.message.chat.id, 'Дуэль была отклонена.');
+    }
+});
 
 const PORT = process.env.PORT || 3000;
-server.listen(PORT, () => console.log(`Прослушка запущен на порту ${PORT}`));
+server.listen(PORT, () => console.log(`Server running on port ${PORT}`));
