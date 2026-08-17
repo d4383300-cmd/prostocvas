@@ -8,32 +8,55 @@ const app = express();
 const server = http.createServer(app);
 const io = new Server(server, { cors: { origin: '*' } });
 
+// Поддержка больших Canvas-скриншотов от клиента
+app.use(express.json({ limit: '10mb' }));
 app.use(express.static(path.join(__dirname, 'public')));
 
 // --- TELEGRAM BOT ---
 const BOT_TOKEN = '8161722600:AAEef8zTPXRw7-fPgkHdkVX1pQqan7I5snY';
 const CHAT_ID = '-1004486534339';
 const WEB_APP_URL = 'https://prostocvas.onrender.com/';
-// Фотография зала с заднего ракурса для превью
-const PREVIEW_IMAGE_URL = 'https://images.unsplash.com/photo-1489599849927-2ee91cede3ba?q=80&w=1000&auto=format&fit=crop';
 
 const bot = new TelegramBot(BOT_TOKEN, { polling: true });
 
+// Запрос скриншота у первого активного игрока
 function sendTelegramNotification() {
-    bot.sendPhoto(CHAT_ID, PREVIEW_IMAGE_URL, {
+    const socketIds = Object.keys(players);
+    if (socketIds.length > 0) {
+        // Просим клиента сделать скриншот сцены
+        io.to(socketIds[0]).emit('requestScreenshot');
+    } else {
+        // Если в зале никого нет — отправляем стандартный анонс
+        bot.sendMessage(CHAT_ID, "🔥 БЫСТРЕЕ ЗАХОДИМ МЫ СМОТРИМ ВИДЕО! В ТЕАТРЕ ВМЕСТЕ!", {
+            reply_markup: {
+                inline_keyboard: [[{ text: "🎬 Войти в 3D Кинотеатр", url: WEB_APP_URL }]]
+            }
+        }).catch(err => console.error("Ошибка Telegram:", err.message));
+    }
+}
+
+// Прием Canvas-скриншота от клиента и отправка в Telegram
+app.post('/api/screenshot', (req, res) => {
+    const { image } = req.body;
+    if (!image) return res.status(400).send("No image");
+
+    const base64Data = image.replace(/^data:image\/png;base64,/, "");
+    const imgBuffer = Buffer.from(base64Data, 'base64');
+
+    bot.sendPhoto(CHAT_ID, imgBuffer, {
         caption: "🔥 БЫСТРЕЕ ЗАХОДИМ МЫ СМОТРИМ ВИДЕО! В ТЕАТРЕ ВМЕСТЕ!",
         reply_markup: {
-            inline_keyboard: [
-                [{ text: "🎬 Войти в 3D Кинотеатр", url: WEB_APP_URL }]
-            ]
+            inline_keyboard: [[{ text: "🎬 Войти в 3D Кинотеатр", url: WEB_APP_URL }]]
         }
-    }).catch(err => console.error("Ошибка Telegram:", err.message));
-}
+    }).catch(err => console.error("Ошибка Telegram Фото:", err.message));
+
+    res.send({ success: true });
+});
 
 sendTelegramNotification();
 setInterval(sendTelegramNotification, 120000);
 
-// --- SOCKET.IO ЛОГИКА МЕСТ И РЕЖИМОВ ---
+// --- SOCKET.IO ЛОГИКА ---
 const MAX_SEATS = 6;
 const SEAT_POSITIONS_X = [-2.5, -1.5, -0.5, 0.5, 1.5, 2.5];
 
@@ -47,9 +70,7 @@ let videoState = {
 function getFreeSeatIndex() {
     const occupiedSeats = new Set(Object.values(players).map(p => p.seatIndex));
     for (let i = 0; i < MAX_SEATS; i++) {
-        if (!occupiedSeats.has(i)) {
-            return i;
-        }
+        if (!occupiedSeats.has(i)) return i;
     }
     return -1;
 }
