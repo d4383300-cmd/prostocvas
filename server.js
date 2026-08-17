@@ -2,141 +2,154 @@ const express = require('express');
 const http = require('http');
 const WebSocket = require('ws');
 const path = require('path');
+const sqlite3 = require('sqlite3').verbose();
+const TelegramBot = require('node-telegram-bot-api');
 
 const app = express();
 const server = http.createServer(app);
 const wss = new WebSocket.Server({ server });
 
+// Инициализация SQLite базы «Прослушки»
+const db = new sqlite3.Database('./proslushka.db', (err) => {
+  if (!err) {
+    db.run(`CREATE TABLE IF NOT EXISTS messages (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      nick TEXT,
+      text TEXT,
+      timestamp DATETIME DEFAULT CURRENT_TIMESTAMP
+    )`);
+  }
+});
+
+// Telegram Бот (укажите ваш токен при необходимости)
+const TELEGRAM_TOKEN = process.env.TELEGRAM_TOKEN || '';
+let bot = null;
+if (TELEGRAM_TOKEN) {
+  bot = new TelegramBot(TELEGRAM_TOKEN, { polling: true });
+}
+
 app.use(express.static(path.join(__dirname, 'public')));
 
-// 3D Места и Игроки
+// 3D Комната и 8 Мест
 const MAX_SEATS = 8;
-const seats = new Array(MAX_SEATS).fill(null); // null или socket.id
-const players3D = {}; // { id: { nick, seatIndex, yaw, pitch } }
-
-let idCounter = 0;
+const seats = new Array(MAX_SEATS).fill(null);
+const playersIn3D = {};
+let clientCounter = 0;
 
 wss.on('connection', (ws) => {
-  ws.id = ++idCounter;
+  ws.id = ++clientCounter;
 
   ws.on('message', (message) => {
     try {
       const data = JSON.parse(message);
 
-      // Обычный чат
+      // Логика чата
       if (data.type === 'chat') {
+        const timeStr = new Date().toLocaleTimeString();
+
+        // Сохранение в базу Прослушки
+        db.run(`INSERT INTO messages (nick, text) VALUES (?, ?)`, [data.nick, data.text]);
+
         // Команда /camera
         if (data.text.trim() === '/camera') {
-          broadcast({
-            type: 'chat',
-            nick: '🤖 БОТ-КАМЕРА',
-            text: '📸 Снимаю класс с камеры наблюдения...'
-          });
-          triggerCameraSnapshot();
+          broadcast({ type: 'chat', nick: '🤖 БОТ', text: '📸 Запрашиваю снимок камеры...' });
+          requestCameraPhoto();
           return;
         }
 
-        // Рассылаем обычное сообщение
         broadcast({
           type: 'chat',
           nick: data.nick,
-          text: data.text
+          text: data.text,
+          time: timeStr
         });
       }
 
-      // Вход в 3D комнат
-      if (data.type === 'join_3d') {
-        let freeSeat = seats.findIndex(s => s === null);
-        if (freeSeat === -1) {
+      // Логика 3D
+      if (data.type === 'enter_3d') {
+        let seatIdx = seats.findIndex(s => s === null);
+        if (seatIdx === -1) {
           ws.send(JSON.stringify({ type: 'room_full' }));
           return;
         }
-
-        seats[freeSeat] = ws.id;
-        players3D[ws.id] = {
-          nick: data.nick,
-          seatIndex: freeSeat,
-          yaw: 0,
-          pitch: 0
-        };
-
-        ws.send(JSON.stringify({ type: 'seat_assigned', seatIndex: freeSeat }));
-        broadcast3DState();
+        seats[seatIdx] = ws.id;
+        playersIn3D[ws.id] = { nick: data.nick, seat: seatIdx, rotY: 0, rotX: 0 };
+        
+        ws.send(JSON.stringify({ type: 'assigned_seat', seat: seatIdx }));
+        sync3DPlayers();
       }
 
-      // Поворот головы
-      if (data.type === 'rotate' && players3D[ws.id]) {
-        players3D[ws.id].yaw = data.yaw;
-        players3D[ws.id].pitch = data.pitch;
-        broadcast3DState();
+      if (data.type === 'look' && playersIn3D[ws.id]) {
+        playersIn3D[ws.id].rotY = data.rotY;
+        playersIn3D[ws.id].rotX = data.rotX;
+        sync3DPlayers();
       }
 
-      // Выход из 3D
-      if (data.type === 'leave_3d') {
-        removePlayerFrom3D(ws.id);
+      if (data.type === 'exit_3d') {
+        leave3D(ws.id);
       }
 
-    } catch (e) {
-      console.error(e);
+      // Приём изображения от клиента и отсыпка в Telegram
+      if (data.type === 'camera_snapshot' && data.image) {
+        if (bot) {
+          const base64Data = data.image.replace(/^data:image\/jpeg;base64,/, "");
+          const imgBuffer = Buffer.from(base64Data, 'base64');
+          // Если есть chat_id, бота отправляет фото
+        }
+      }
+
+    } catch (err) {
+      console.error(err);
     }
   });
 
   ws.on('close', () => {
-    removePlayerFrom3D(ws.id);
+    leave3D(ws.id);
   });
 });
 
-function removePlayerFrom3D(id) {
-  if (players3D[id]) {
-    const seatIdx = players3D[id].seatIndex;
-    if (seatIdx !== undefined) seats[seatIdx] = null;
-    delete players3D[id];
-    broadcast3DState();
+function leave3D(id) {
+  if (playersIn3D[id]) {
+    const s = playersIn3D[id].seat;
+    if (s !== undefined) seats[s] = null;
+    delete playersIn3D[id];
+    sync3DPlayers();
   }
 }
 
 function broadcast(data) {
   const msg = JSON.stringify(data);
-  wss.clients.forEach(client => {
-    if (client.readyState === WebSocket.OPEN) {
-      client.send(msg);
-    }
+  wss.clients.forEach(c => {
+    if (c.readyState === WebSocket.OPEN) c.send(msg);
   });
 }
 
-function broadcast3DState() {
-  broadcast({
-    type: 'players_update',
-    players: players3D
-  });
+function sync3DPlayers() {
+  broadcast({ type: 'players_sync', players: playersIn3D });
 }
 
-// Принудительный запрос фото с камеры у любого подключенного клиента ПК
-function triggerCameraSnapshot() {
-  // Выбираем случайного клиента в 3D для сбора снимка
-  const activeClients = Array.from(wss.clients).filter(c => players3D[c.id]);
-  if (activeClients.length > 0) {
-    const randomClient = activeClients[Math.floor(Math.random() * activeClients.length)];
-    // В реальности снимок генерируется на стороне клиента через captureSecurityCamera()
+function requestCameraPhoto() {
+  const clients = Array.from(wss.clients).filter(c => playersIn3D[c.id]);
+  if (clients.length > 0) {
+    clients[0].send(JSON.stringify({ type: 'request_photo' }));
   }
 }
 
-// Автоматический прикол бота: скидывать сообщения каждые 1-5 минут
-function scheduleBotPhoto() {
-  const randomTime = Math.floor(Math.random() * (300000 - 60000 + 1)) + 60000; // от 1 до 5 минут
+// Авто-рассылка бота раз в 1-5 минут
+function autoBotLoop() {
+  const delay = Math.floor(Math.random() * (300000 - 60000 + 1)) + 60000;
   setTimeout(() => {
-    const count = Object.keys(players3D).length;
+    const count = Object.keys(playersIn3D).length;
     broadcast({
       type: 'chat',
-      nick: '🤖 БОТ-НАБЛЮДАТЕЛЬ',
-      text: `[АВТО-ОТЧЕТ] В классе сейчас учеников: ${count}/8. Используйте /camera чтобы сделать фото!`
+      nick: '🤖 БОТ-ПРОСЛУШКА',
+      text: `[АВТО-ОТЧЕТ] Игроков в 3D классе: ${count}/8. Напишите /camera для снимка!`
     });
-    scheduleBotPhoto();
-  }, randomTime);
+    requestCameraPhoto();
+    autoBotLoop();
+  }, delay);
 }
-scheduleBotPhoto();
+autoBotLoop();
 
 const PORT = process.env.PORT || 3000;
-server.listen(PORT, () => {
-  console.log(`Сервер запущен на порту ${PORT}`);
-});
+server.listen(PORT, () => console.log(`Прослушка запущен на порту ${PORT}`));
