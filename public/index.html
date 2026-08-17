@@ -1,288 +1,67 @@
 <!DOCTYPE html>
 <html lang="ru">
 <head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
-  <title>ХУЮТУБ — Видеохостинг & 3D Кинотеатр</title>
-  <style>
-    * { box-sizing: border-box; }
-    body { margin: 0; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background: #0f0f0f; color: #fff; overflow-x: hidden; }
-    
-    /* Шапка */
-    header { display: flex; justify-content: space-between; align-items: center; padding: 12px 24px; background: #212121; border-bottom: 2px solid #ff0000; }
-    .logo { font-size: 26px; font-weight: 900; color: #ff0000; letter-spacing: 1px; }
-    .search-box { display: flex; width: 45%; }
-    .search-box input { width: 100%; padding: 10px 14px; border-radius: 20px 0 0 20px; border: 1px solid #303030; background: #121212; color: #fff; outline: none; }
-    .search-box button { padding: 10px 20px; border-radius: 0 20px 20px 0; border: none; background: #303030; color: #fff; cursor: pointer; }
-    .search-box button:hover { background: #404040; }
-    
-    .cinema-btn { background: linear-gradient(45deg, #ff0000, #990000); color: white; border: none; padding: 10px 20px; cursor: pointer; border-radius: 20px; font-weight: bold; box-shadow: 0 0 10px rgba(255,0,0,0.5); }
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+    <title>3D Онлайн Кинотеатр</title>
+    <style>
+        body { margin: 0; overflow: hidden; background: #000; font-family: Arial, sans-serif; user-select: none; }
+        #canvas-container { width: 100vw; height: 100vh; display: block; }
+        
+        /* Модальное окно ввода ссылки */
+        #urlModal {
+            display: none; position: fixed; top: 50%; left: 50%;
+            transform: translate(-50%, -50%); background: rgba(0, 0, 0, 0.9);
+            padding: 20px; border-radius: 12px; border: 1px solid #ff0055;
+            z-index: 100; text-align: center; color: white; width: 80%; max-width: 400px;
+        }
+        #urlInput {
+            width: 90%; padding: 10px; margin: 10px 0; border-radius: 6px;
+            border: 1px solid #444; background: #222; color: white; outline: none;
+        }
+        #btnSubmit {
+            padding: 10px 20px; background: #ff0055; color: white;
+            border: none; border-radius: 6px; cursor: pointer; font-weight: bold;
+        }
 
-    /* Видео Лента */
-    .feed { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 20px; padding: 24px; }
-    .card { background: #1f1f1f; border-radius: 12px; overflow: hidden; transition: transform 0.2s; }
-    .card:hover { transform: translateY(-4px); }
-    .card video { width: 100%; height: 160px; object-fit: cover; background: #000; }
-    .card-info { padding: 12px; }
-    .card-title { font-size: 15px; font-weight: bold; margin-bottom: 6px; }
-    .card-author { font-size: 12px; color: #aaa; }
+        /* Кнопка смены видео для мобилок */
+        #mobileUrlBtn {
+            position: fixed; top: 15px; right: 15px; z-index: 90;
+            background: rgba(255, 0, 85, 0.8); color: white; border: none;
+            padding: 10px 15px; border-radius: 8px; font-weight: bold;
+        }
 
-    /* 3D Оверлей */
-    #cinema-container { display: none; position: fixed; top: 0; left: 0; width: 100vw; height: 100vh; z-index: 1000; background: #000; }
-    #canvas3d { width: 100%; height: 100%; }
-    #exit-btn { position: absolute; top: 20px; left: 20px; z-index: 1001; }
-    #controls-hint { position: absolute; bottom: 20px; left: 20px; z-index: 1001; background: rgba(0,0,0,0.7); padding: 10px 15px; border-radius: 8px; pointer-events: none; }
-  </style>
-  <script src="/socket.io/socket.io.js"></script>
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+        /* Виртуальный джойстик на мобильном */
+        #joystickZone {
+            position: fixed; bottom: 20px; left: 20px; width: 120px; height: 120px;
+            background: rgba(255, 255, 255, 0.1); border-radius: 60px;
+            z-index: 90; display: none; touch-action: none; border: 1px solid rgba(255,255,255,0.2);
+        }
+        #joystickKnob {
+            width: 50px; height: 50px; background: rgba(255, 0, 85, 0.8);
+            border-radius: 25px; position: absolute; top: 35px; left: 35px;
+        }
+    </style>
+    <!-- Подключение Telegram WebApp SDK -->
+    <script src="https://telegram.org/js/telegram-web-app.js"></script>
+    <!-- Three.js & Socket.io -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <script src="/socket.io/socket.io.js"></script>
 </head>
 <body>
 
-  <header>
-    <div class="logo">ХУЮТУБ</div>
-    <div class="search-box">
-      <input type="text" id="searchInput" oninput="filterVideos()" placeholder="Поиск по Хуютуб, ВК, RuTube...">
-      <button>🔍</button>
+    <button id="mobileUrlBtn" onclick="toggleUrlModal()">Вставить видео (Т)</button>
+
+    <div id="urlModal">
+        <h3>Вставьте ссылку на Direct MP4/WebM</h3>
+        <input type="text" id="urlInput" placeholder="https://site.com/video.mp4">
+        <br>
+        <button id="btnSubmit" onclick="submitUrl()">Запустить видео</button>
     </div>
-    <button class="cinema-btn" onclick="toggleCinema()">🍿 ВОЙТИ В 3D КИНОТЕАТР</button>
-  </header>
 
-  <!-- Лента видео -->
-  <div class="feed" id="videoFeed"></div>
+    <div id="joystickZone"><div id="joystickKnob"></div></div>
+    <div id="canvas-container"></div>
 
-  <!-- 3D Зал -->
-  <div id="cinema-container">
-    <button class="cinema-btn" id="exit-btn" onclick="toggleCinema()">❌ ВЫЙТИ ИЗ ЗАЛА</button>
-    <div id="controls-hint">🎮 <b>Управление:</b> W, A, S, D — Ходить | Мышь — Оглядываться</div>
-    <canvas id="canvas3d"></canvas>
-  </div>
-
-  <script>
-    // 1. Поиск и База Видео
-    const videosDB = [
-      { title: "[Хуютуб Смешно] Кролик Big Buck Bunny", src: "https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/BigBuckBunny.mp4", author: "Хуютуб Ориджинал" },
-      { title: "[VK / RuTube] Гигантский Заяц и друзья", src: "https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/ElephantsDream.mp4", author: "VK Видео / RuTube" },
-      { title: "[YouTube] Приключения в лесу", src: "https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/ForBiggerBlazes.mp4", author: "YouTube Import" }
-    ];
-
-    function renderFeed(list) {
-      const feed = document.getElementById('videoFeed');
-      feed.innerHTML = '';
-      list.forEach(v => {
-        feed.innerHTML += `
-          <div class="card">
-            <video controls src="${v.src}"></video>
-            <div class="card-info">
-              <div class="card-title">${v.title}</div>
-              <div class="card-author">${v.author}</div>
-            </div>
-          </div>
-        `;
-      });
-    }
-
-    function filterVideos() {
-      const q = document.getElementById('searchInput').value.toLowerCase();
-      const filtered = videosDB.filter(v => v.title.toLowerCase().includes(q) || v.author.toLowerCase().includes(q));
-      renderFeed(filtered);
-    }
-
-    renderFeed(videosDB); // Старт ленты
-
-    // 2. Уютный 3D Кинотеатр
-    const socket = io();
-    let inCinema = false, scene, camera, renderer, videoElement, videoTexture;
-    let localPlayerId, otherPlayers = {};
-    let keys = {};
-    let yaw = 0, pitch = 0;
-
-    function toggleCinema() {
-      inCinema = !inCinema;
-      document.getElementById('cinema-container').style.display = inCinema ? 'block' : 'none';
-      if (inCinema && !scene) init3D();
-    }
-
-    function init3D() {
-      const container = document.getElementById('cinema-container');
-      scene = new THREE.Scene();
-      scene.background = new THREE.Color(0x050305);
-      scene.fog = new THREE.FogExp2(0x050305, 0.08);
-
-      camera = new THREE.PerspectiveCamera(60, window.innerWidth / window.innerHeight, 0.1, 100);
-      renderer = new THREE.WebGLRenderer({ canvas: document.getElementById('canvas3d'), antialias: true });
-      renderer.setSize(window.innerWidth, window.innerHeight);
-
-      // Уютный Свет
-      const ambientLight = new THREE.AmbientLight(0xffddaa, 0.4); // Тёплый свет
-      scene.add(ambientLight);
-
-      const ambientFloor = new THREE.DirectionalLight(0x332244, 0.6);
-      ambientFloor.position.set(0, 10, 0);
-      scene.add(ambientFloor);
-
-      // Пол (Красный ковер)
-      const floorGeo = new THREE.PlaneGeometry(16, 20);
-      const floorMat = new THREE.MeshStandardMaterial({ color: 0x4a0e17, roughness: 0.8 });
-      const floor = new THREE.Mesh(floorGeo, floorMat);
-      floor.rotation.x = -Math.PI / 2;
-      scene.add(floor);
-
-      // Деревянные уютные стены
-      const wallMat = new THREE.MeshStandardMaterial({ color: 0x2b1810, roughness: 0.5 });
-      const leftWall = new THREE.Mesh(new THREE.PlaneGeometry(20, 8), wallMat);
-      leftWall.position.set(-8, 4, 0);
-      leftWall.rotation.y = Math.PI / 2;
-      scene.add(leftWall);
-
-      const rightWall = leftWall.clone();
-      rightWall.position.x = 8;
-      rightWall.rotation.y = -Math.PI / 2;
-      scene.add(rightWall);
-
-      // ВИДЕО-ЭКРАН (Без черных багов)
-      videoElement = document.createElement('video');
-      videoElement.src = "https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/BigBuckBunny.mp4";
-      videoElement.crossOrigin = "anonymous";
-      videoElement.loop = true;
-      videoElement.muted = true;
-      videoElement.play();
-
-      videoTexture = new THREE.VideoTexture(videoElement);
-      const screenGeo = new THREE.PlaneGeometry(10, 5.6);
-      const screenMat = new THREE.MeshBasicMaterial({ map: videoTexture });
-      const screenMesh = new THREE.Mesh(screenGeo, screenMat);
-      screenMesh.position.set(0, 4, -9.8);
-      scene.add(screenMesh);
-
-      // Свет от самого экрана
-      const screenLight = new THREE.PointLight(0xffffff, 1.2, 12);
-      screenLight.position.set(0, 4, -8);
-      scene.add(screenLight);
-
-      // Кресла в зале
-      const chairMat = new THREE.MeshStandardMaterial({ color: 0x800000 });
-      for(let row = 0; row < 3; row++) {
-        for(let col = -3; col <= 3; col += 2) {
-          const chair = new THREE.Mesh(new THREE.BoxGeometry(1.2, 1, 1.2), chairMat);
-          chair.position.set(col * 1.3, 0.5, row * 2.5);
-          scene.add(chair);
-        }
-      }
-
-      // Управление вращением мышью
-      window.addEventListener('mousemove', (e) => {
-        if (document.pointerLockElement === renderer.domElement) {
-          yaw -= e.movementX * 0.002;
-          pitch -= e.movementY * 0.002;
-          pitch = Math.max(-Math.PI/3, Math.min(Math.PI/3, pitch));
-          camera.rotation.set(pitch, yaw, 0, 'YXZ');
-        }
-      });
-
-      renderer.domElement.addEventListener('click', () => {
-        renderer.domElement.requestPointerLock();
-      });
-
-      window.addEventListener('keydown', e => keys[e.code] = true);
-      window.addEventListener('keyup', e => keys[e.code] = false);
-
-      camera.position.set(0, 1.6, 4);
-
-      // Сеть
-      socket.on('init', data => {
-        localPlayerId = data.id;
-        Object.keys(data.players).forEach(id => {
-          if (id !== localPlayerId) createPlayerModel(id, data.players[id]);
-        });
-      });
-
-      socket.on('playerJoined', data => createPlayerModel(data.id, data.player));
-      socket.on('playerMoved', data => updatePlayerModel(data.id, data));
-      socket.on('playerLeft', id => removePlayerModel(id));
-
-      animate();
-    }
-
-    // Красивые модельки людей
-    function createPlayerModel(id, pos) {
-      const group = new THREE.Group();
-      
-      // Тело в худи
-      const body = new THREE.Mesh(new THREE.CylinderGeometry(0.3, 0.4, 1.2), new THREE.MeshStandardMaterial({ color: 0x0088cc }));
-      body.position.y = 0.6;
-      group.add(body);
-
-      // Голова с глазами
-      const headGroup = new THREE.Group();
-      headGroup.name = "headGroup";
-      headGroup.position.y = 1.4;
-
-      const head = new THREE.Mesh(new THREE.SphereGeometry(0.25), new THREE.MeshStandardMaterial({ color: 0xffccaa }));
-      headGroup.add(head);
-
-      const eyeMat = new THREE.MeshBasicMaterial({ color: 0x000000 });
-      const leftEye = new THREE.Mesh(new THREE.SphereGeometry(0.04), eyeMat);
-      leftEye.position.set(-0.08, 0.05, -0.22);
-      const rightEye = leftEye.clone();
-      rightEye.position.x = 0.08;
-
-      headGroup.add(leftEye);
-      headGroup.add(rightEye);
-      group.add(headGroup);
-
-      group.position.set(pos.x, pos.y, pos.z);
-      scene.add(group);
-      otherPlayers[id] = group;
-    }
-
-    function updatePlayerModel(id, data) {
-      if (otherPlayers[id]) {
-        otherPlayers[id].position.set(data.x, data.y - 0.8, data.z);
-        const headGroup = otherPlayers[id].getObjectByName("headGroup");
-        if (headGroup) headGroup.rotation.y = data.ry;
-      }
-    }
-
-    function removePlayerModel(id) {
-      if (otherPlayers[id]) {
-        scene.remove(otherPlayers[id]);
-        delete otherPlayers[id];
-      }
-    }
-
-    // Главный цикл с анимациями
-    function animate() {
-      if (!inCinema) return;
-      requestAnimationFrame(animate);
-
-      const speed = 0.08;
-      let moved = false;
-
-      const forward = new THREE.Vector3(0, 0, -1).applyQuaternion(camera.quaternion);
-      forward.y = 0; forward.normalize();
-      const side = new THREE.Vector3(1, 0, 0).applyQuaternion(camera.quaternion);
-      side.y = 0; side.normalize();
-
-      if (keys['KeyW']) { camera.position.addScaledVector(forward, speed); moved = true; }
-      if (keys['KeyS']) { camera.position.addScaledVector(forward, -speed); moved = true; }
-      if (keys['KeyA']) { camera.position.addScaledVector(side, -speed); moved = true; }
-      if (keys['KeyD']) { camera.position.addScaledVector(side, speed); moved = true; }
-
-      // Не даём уйти за стены
-      camera.position.x = Math.max(-7, Math.min(7, camera.position.x));
-      camera.position.z = Math.max(-8, Math.min(8, camera.position.z));
-
-      if (moved && socket) {
-        socket.emit('move', {
-          x: camera.position.x,
-          y: camera.position.y,
-          z: camera.position.z,
-          ry: yaw
-        });
-      }
-
-      renderer.render(scene, camera);
-    }
-  </script>
+    <script src="app.js"></script>
 </body>
 </html>
