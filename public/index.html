@@ -3,32 +3,63 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
-  <title>Oldschool Office Chat</title>
+  <title>3D Telegram Office</title>
   <style>
-    body { margin: 0; overflow: hidden; background: #000; font-family: monospace; }
+    body { margin: 0; overflow: hidden; background: #000; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; user-select: none; }
     #canvas-container { width: 100vw; height: 100vh; }
-    #ui { position: absolute; top: 10px; left: 10px; color: #0f0; z-index: 10; pointer-events: none; }
-    #input-box {
-      position: absolute; bottom: 20px; left: 50%; transform: translateX(-50%);
-      display: none; background: rgba(0,0,0,0.8); padding: 10px; border: 2px solid #0f0;
+    
+    /* Экран блокировки для Захвата мыши */
+    #blocker {
+      position: absolute; width: 100%; height: 100%; background: rgba(0,0,0,0.75);
+      display: flex; flex-direction: column; justify-content: center; align-items: center;
+      color: #fff; z-index: 100; cursor: pointer; text-align: center;
     }
-    input, button { background: #111; color: #0f0; border: 1px solid #0f0; padding: 8px; }
-    .btn-action { position: absolute; right: 20px; padding: 15px; background: #222; color: #fff; border: 2px solid #fff; border-radius: 8px; }
+    #blocker h1 { font-size: 30px; margin-bottom: 10px; color: #2AABEE; }
+
+    /* Поле ввода прямо как в Telegram */
+    #chat-modal {
+      position: absolute; bottom: 30px; left: 50%; transform: translateX(-50%);
+      display: none; background: #17212b; padding: 10px; border-radius: 10px;
+      box-shadow: 0 0 15px rgba(0,0,0,0.5); z-index: 50; width: 320px;
+    }
+    #chat-modal input {
+      width: 70%; padding: 8px; border: none; background: #0e1621; color: #fff; border-radius: 5px; outline: none;
+    }
+    #chat-modal button {
+      width: 25%; padding: 8px; border: none; background: #2AABEE; color: #fff; font-weight: bold; border-radius: 5px; cursor: pointer;
+    }
+
+    /* Кнопки действий */
+    .btn-action {
+      position: absolute; right: 20px; z-index: 40; padding: 12px 20px;
+      background: #242f3d; color: #fff; border: 1px solid #2AABEE; border-radius: 8px;
+      cursor: pointer; font-weight: bold; transition: 0.2s;
+    }
+    .btn-action:hover { background: #2AABEE; }
     #smoke-btn { bottom: 80px; }
     #selfie-btn { bottom: 20px; }
+    
+    #crosshair {
+      position: absolute; top: 50%; left: 50%; width: 6px; height: 6px;
+      background: rgba(255,255,255,0.6); border-radius: 50%; transform: translate(-50%, -50%);
+      pointer-events: none; z-index: 30;
+    }
   </style>
 </head>
 <body>
-  <div id="ui">
-    <div id="name-tag">Ваше имя: Loading...</div>
-    <small>Кликните по монитору, чтобы написать в чат</small>
+
+  <div id="blocker">
+    <h1>НАЖМИ, ЧТОБЫ ВОЙТИ В ОФИС</h1>
+    <p>Управление: Двигай мышью для обзора<br>Клик по своему монитору — открыть чат<br>Esc — выпустить мышь</p>
   </div>
 
-  <button id="smoke-btn" class="btn-action">🚬 Курить</button>
-  <button id="selfie-btn" class="btn-action">📸 Селфи</button>
+  <div id="crosshair"></div>
 
-  <div id="input-box">
-    <input type="text" id="msg-input" placeholder="Сообщение в ТГ...">
+  <button id="smoke-btn" class="btn-action">🚬 Перекур</button>
+  <button id="selfie-btn" class="btn-action">📸 Селфи в ТГ</button>
+
+  <div id="chat-modal">
+    <input type="text" id="msg-input" placeholder="Написать в ТГ..." maxlength="60">
     <button id="send-btn">Отправить</button>
   </div>
 
@@ -38,177 +69,396 @@
   <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
   <script>
     const socket = io();
-    const names = ["Дима", "Саша", "Алексей", "Егор", "Миша", "Игорь"];
-    const myName = names[Math.floor(Math.random() * names.length)];
-    document.getElementById('name-tag').innerText = "Рабочее место: " + myName;
+    let myId, myData;
+    const otherPlayers = {};
 
-    // Инициализация Three.js
-    const container = document.getElementById('canvas-container');
+    // Захват мыши (Pointer Lock)
+    const blocker = document.getElementById('blocker');
+    const chatModal = document.getElementById('chat-modal');
+    const msgInput = document.getElementById('msg-input');
+    let isLocked = false;
+
+    blocker.addEventListener('click', () => {
+      document.body.requestPointerLock();
+    });
+
+    document.addEventListener('pointerlockchange', () => {
+      if (document.pointerLockElement === document.body) {
+        isLocked = true;
+        blocker.style.display = 'none';
+      } else {
+        isLocked = false;
+        if (chatModal.style.display !== 'block') {
+          blocker.style.display = 'flex';
+        }
+      }
+    });
+
+    // THREE.JS СЦЕНА
     const scene = new THREE.Scene();
-    scene.fog = new THREE.FogExp2(0x111111, 0.05);
+    scene.background = new THREE.Color(0x1e1e24);
+    scene.fog = new THREE.FogExp2(0x1e1e24, 0.03);
 
     const camera = new THREE.PerspectiveCamera(60, window.innerWidth / window.innerHeight, 0.1, 1000);
-    camera.position.set(0, 1.2, 0); // Позиция сидя за столом
-
     const renderer = new THREE.WebGLRenderer({ antialias: true, preserveDrawingBuffer: true });
     renderer.setSize(window.innerWidth, window.innerHeight);
-    container.appendChild(renderer.domElement);
+    renderer.shadowMap.enabled = true;
+    document.getElementById('canvas-container').appendChild(renderer.domElement);
 
-    // Освещение
-    const ambientLight = new THREE.AmbientLight(0xffffff, 0.4);
+    // Освещение (Офисные лампы дневного света)
+    const ambientLight = new THREE.AmbientLight(0xffffff, 0.6);
     scene.add(ambientLight);
-    const lamp = new THREE.PointLight(0xffeeaa, 1, 10);
-    lamp.position.set(0, 2, -1);
-    scene.add(lamp);
 
-    // Динамическая процедурная текстура холста для CRT-монитора
-    const canvasCRT = document.createElement('canvas');
-    canvasCRT.width = 512; canvasCRT.height = 512;
-    const ctx = canvasCRT.getContext('2d');
-    const crtTexture = new THREE.CanvasTexture(canvasCRT);
+    const light1 = new THREE.PointLight(0xffeedd, 0.8, 15);
+    light1.position.set(0, 3.5, 0);
+    scene.add(light1);
 
-    let chatLogs = ["--- CRT MONITOR v1.0 ---", "Чат подгружен..."];
-    function updateCRT() {
-      ctx.fillStyle = '#051305'; ctx.fillRect(0, 0, 512, 512);
-      ctx.fillStyle = '#00ff00'; ctx.font = '20px monospace';
-      chatLogs.slice(-15).forEach((line, i) => {
-        ctx.fillText(line, 20, 30 + (i * 30));
+    // ПОМЕЩЕНИЕ ОФИСА (Стены, пол, потолок, окна)
+    const roomGroup = new THREE.Group();
+    // Пол (Плитка)
+    const floorGeo = new THREE.PlaneGeometry(12, 12);
+    const floorMat = new THREE.MeshStandardMaterial({ color: 0x333338, roughness: 0.8 });
+    const floor = new THREE.Mesh(floorGeo, floorMat);
+    floor.rotation.x = -Math.PI / 2;
+    roomGroup.add(floor);
+
+    // Стены
+    const wallMat = new THREE.MeshStandardMaterial({ color: 0x60686d, roughness: 0.9 });
+    const backWall = new THREE.Mesh(new THREE.PlaneGeometry(12, 4), wallMat);
+    backWall.position.set(0, 2, -6);
+    roomGroup.add(backWall);
+
+    const leftWall = new THREE.Mesh(new THREE.PlaneGeometry(12, 4), wallMat);
+    leftWall.position.set(-6, 2, 0);
+    leftWall.rotation.y = Math.PI / 2;
+    roomGroup.add(leftWall);
+
+    const rightWall = leftWall.clone();
+    rightWall.position.set(6, 2, 0);
+    rightWall.rotation.y = -Math.PI / 2;
+    roomGroup.add(rightWall);
+
+    // Офисные картины/постеры
+    const posterGeo = new THREE.PlaneGeometry(1.5, 1);
+    const posterMat = new THREE.MeshBasicMaterial({ color: 0x2AABEE });
+    const poster = new THREE.Mesh(posterGeo, posterMat);
+    poster.position.set(0, 2.5, -5.9);
+    roomGroup.add(poster);
+
+    scene.add(roomGroup);
+
+    // ТЕКСТУРА ТЕЛЕГРАМ ДЛЯ ЭКРАНА
+    const tgCanvas = document.createElement('canvas');
+    tgCanvas.width = 512; tgCanvas.height = 384;
+    const tgCtx = tgCanvas.getContext('2d');
+    const tgTexture = new THREE.CanvasTexture(tgCanvas);
+
+    let chatMessages = [
+      { user: 'TG Bot', text: 'Добро пожаловать в офис!' }
+    ];
+
+    function drawTelegramUI() {
+      // Шапка Telegram Desktop
+      tgCtx.fillStyle = '#17212b'; tgCtx.fillRect(0, 0, 512, 384);
+      tgCtx.fillStyle = '#242f3d'; tgCtx.fillRect(0, 0, 512, 45);
+      tgCtx.fillStyle = '#ffffff'; tgCtx.font = 'bold 16px sans-serif';
+      tgCtx.fillText('Чат: -1004349256495', 15, 28);
+
+      // Рабочая область чата
+      tgCtx.fillStyle = '#0e1621'; tgCtx.fillRect(0, 45, 512, 339);
+
+      // Сообщения
+      let startY = 70;
+      chatMessages.slice(-7).forEach(m => {
+        // Плашка сообщения
+        tgCtx.fillStyle = '#182533';
+        tgCtx.beginPath();
+        tgCtx.roundRect(15, startY, 480, 35, 6);
+        tgCtx.fill();
+
+        tgCtx.fillStyle = '#2AABEE';
+        tgCtx.font = 'bold 13px sans-serif';
+        tgCtx.fillText(m.user + ':', 25, startY + 22);
+
+        tgCtx.fillStyle = '#ffffff';
+        tgCtx.font = '13px sans-serif';
+        tgCtx.fillText(m.text, 30 + tgCtx.measureText(m.user + ':').width, startY + 22);
+
+        startY += 42;
       });
-      crtTexture.needsUpdate = true;
+      tgTexture.needsUpdate = true;
     }
-    updateCRT();
+    drawTelegramUI();
 
-    // СОЗДАНИЕ ОФИСА И СТОЛА
-    // Офисные стены
-    const roomGeo = new THREE.BoxGeometry(10, 5, 10);
-    const roomMat = new THREE.MeshBasicMaterial({ color: 0x222225, side: THREE.BackSide });
-    scene.add(new THREE.Mesh(roomGeo, roomMat));
+    // СОЗДАНИЕ МОДЕЛИ ЧЕЛОВЕКА (КОЛЛЕГИ)
+    function createHumanModel(app) {
+      const group = new THREE.Group();
 
-    // Стол
-    const deskGeo = new THREE.BoxGeometry(2, 0.8, 1.2);
-    const deskMat = new THREE.MeshLambertMaterial({ color: 0x5c4033 });
-    const desk = new THREE.Mesh(deskGeo, deskMat);
-    desk.position.set(0, 0.4, -0.8);
-    scene.add(desk);
+      // Туловище (Рубашка)
+      const bodyGeo = new THREE.BoxGeometry(0.5, 0.6, 0.3);
+      const bodyMat = new THREE.MeshStandardMaterial({ color: app.shirtColor });
+      const body = new THREE.Mesh(bodyGeo, bodyMat);
+      body.position.y = 0.8;
+      group.add(body);
 
-    // Старый ЭЛТ Монитор
-    const monitorGeo = new THREE.BoxGeometry(0.6, 0.5, 0.5);
-    const monitorMat = new THREE.MeshLambertMaterial({ color: 0xcccccc });
-    const monitor = new THREE.Mesh(monitorGeo, monitorMat);
-    monitor.position.set(0, 1.05, -0.9);
-    scene.add(monitor);
+      // Голова
+      const headGeo = new THREE.BoxGeometry(0.3, 0.3, 0.3);
+      const headMat = new THREE.MeshStandardMaterial({ color: app.skinColor });
+      const head = new THREE.Mesh(headGeo, headMat);
+      head.position.y = 1.3;
+      group.add(head);
 
-    // Экран
-    const screenGeo = new THREE.PlaneGeometry(0.5, 0.4);
-    const screenMat = new THREE.MeshBasicMaterial({ map: crtTexture });
-    const screen = new THREE.Mesh(screenGeo, screenMat);
-    screen.position.set(0, 1.05, -0.64);
-    scene.add(screen);
+      // Волосы
+      const hairGeo = new THREE.BoxGeometry(0.32, 0.1, 0.32);
+      const hairMat = new THREE.MeshStandardMaterial({ color: app.hairColor });
+      const hair = new THREE.Mesh(hairGeo, hairMat);
+      hair.position.set(0, 1.45, 0);
+      group.add(hair);
 
-    // Листочек с именем
-    const paperGeo = new THREE.PlaneGeometry(0.2, 0.15);
-    const paperCanvas = document.createElement('canvas');
-    paperCanvas.width = 256; paperCanvas.height = 128;
-    const pCtx = paperCanvas.getContext('2d');
-    pCtx.fillStyle = '#fff'; pCtx.fillRect(0,0,256,128);
-    pCtx.fillStyle = '#000'; pCtx.font = 'bold 30px sans-serif';
-    pCtx.fillText(myName, 20, 70);
-    const paperTexture = new THREE.CanvasTexture(paperCanvas);
-    const paperMat = new THREE.MeshBasicMaterial({ map: paperTexture });
-    const paper = new THREE.Mesh(paperGeo, paperMat);
-    paper.rotation.x = -Math.PI / 2;
-    paper.position.set(-0.5, 0.81, -0.6);
-    scene.add(paper);
+      // Усы (если есть)
+      if (app.hasMustache) {
+        const stacheGeo = new THREE.BoxGeometry(0.15, 0.04, 0.05);
+        const stache = new THREE.Mesh(stacheGeo, hairMat);
+        stache.position.set(0, 1.22, 0.16);
+        group.add(stache);
+      }
 
-    // Управление вращением камеры (ПК и Тач)
-    let isDragging = false, previousMousePosition = { x: 0, y: 0 };
-    const onMove = (e) => {
-      const clientX = e.clientX || (e.touches && e.touches[0].clientX);
-      const clientY = e.clientY || (e.touches && e.touches[0].clientY);
-      if (!isDragging || clientX === undefined) return;
-      
-      const deltaX = clientX - previousMousePosition.x;
-      const deltaY = clientY - previousMousePosition.y;
+      // Руки (Движение при печати)
+      const armGeo = new THREE.BoxGeometry(0.12, 0.4, 0.12);
+      const leftArm = new THREE.Mesh(armGeo, bodyMat);
+      leftArm.position.set(-0.31, 0.75, 0.1);
+      leftArm.rotation.x = -Math.PI / 3;
 
-      camera.rotation.y -= deltaX * 0.005;
-      camera.rotation.x -= deltaY * 0.005;
-      camera.rotation.x = Math.max(-Math.PI/4, Math.min(Math.PI/4, camera.rotation.x));
+      const rightArm = leftArm.clone();
+      rightArm.position.x = 0.31;
 
-      previousMousePosition = { x: clientX, y: clientY };
-    };
+      group.add(leftArm);
+      group.add(rightArm);
 
-    window.addEventListener('mousedown', (e) => { isDragging = true; previousMousePosition = { x: e.clientX, y: e.clientY }; });
-    window.addEventListener('touchstart', (e) => { isDragging = true; previousMousePosition = { x: e.touches[0].clientX, y: e.touches[0].clientY }; });
-    window.addEventListener('mouseup', () => isDragging = false);
-    window.addEventListener('touchend', () => isDragging = false);
-    window.addEventListener('mousemove', onMove);
-    window.addEventListener('touchmove', onMove);
+      return { mesh: group, leftArm, rightArm };
+    }
 
-    // Чат и Socket.io
+    // СОЗДАНИЕ РАБОЧЕГО МЕСТА (Стол, Старый монитор, Клава, Мышка, Листочек)
+    function createDeskSetup(deskData, ownerName) {
+      const group = new THREE.Group();
+      group.position.set(deskData.x, 0, deskData.z);
+      group.rotation.y = deskData.rot;
+
+      // Деревянный стол
+      const deskGeo = new THREE.BoxGeometry(1.6, 0.75, 0.9);
+      const deskMat = new THREE.MeshStandardMaterial({ color: 0x4a2e18, roughness: 0.6 });
+      const desk = new THREE.Mesh(deskGeo, deskMat);
+      desk.position.y = 0.375;
+      group.add(desk);
+
+      // Монитор ЭЛТ (Старый выпуклый)
+      const monBodyGeo = new THREE.BoxGeometry(0.55, 0.45, 0.45);
+      const monMat = new THREE.MeshStandardMaterial({ color: 0xd1c7bd, roughness: 0.5 });
+      const monBody = new THREE.Mesh(monBodyGeo, monMat);
+      monBody.position.set(0, 0.98, -0.1);
+      group.add(monBody);
+
+      // Экран монитора
+      const screenGeo = new THREE.PlaneGeometry(0.48, 0.36);
+      const screenMat = new THREE.MeshBasicMaterial({ map: tgTexture });
+      const screen = new THREE.Mesh(screenGeo, screenMat);
+      screen.position.set(0, 0.98, 0.126);
+      group.add(screen);
+
+      // Клавиатура
+      const kbGeo = new THREE.BoxGeometry(0.4, 0.02, 0.15);
+      const kbMat = new THREE.MeshStandardMaterial({ color: 0xc2b8ad });
+      const kb = new THREE.Mesh(kbGeo, kbMat);
+      kb.position.set(0, 0.76, 0.2);
+      group.add(kb);
+
+      // Мышка
+      const mouseGeo = new THREE.BoxGeometry(0.08, 0.03, 0.12);
+      const mouseMesh = new THREE.Mesh(mouseGeo, kbMat);
+      mouseMesh.position.set(0.3, 0.76, 0.2);
+      group.add(mouseMesh);
+
+      // Листочек с именем
+      const paperCanvas = document.createElement('canvas');
+      paperCanvas.width = 256; paperCanvas.height = 128;
+      const pCtx = paperCanvas.getContext('2d');
+      pCtx.fillStyle = '#fff8dc'; pCtx.fillRect(0,0,256,128);
+      pCtx.fillStyle = '#000'; pCtx.font = 'bold 28px sans-serif';
+      pCtx.fillText("Сотрудник:", 10, 40);
+      pCtx.fillStyle = '#2AABEE';
+      pCtx.fillText(ownerName, 10, 85);
+
+      const paperTex = new THREE.CanvasTexture(paperCanvas);
+      const paperGeo = new THREE.PlaneGeometry(0.2, 0.12);
+      const paperMat = new THREE.MeshBasicMaterial({ map: paperTex });
+      const paper = new THREE.Mesh(paperGeo, paperMat);
+      paper.rotation.x = -Math.PI / 2;
+      paper.position.set(-0.5, 0.76, 0.2);
+      group.add(paper);
+
+      scene.add(group);
+      return { group, screen };
+    }
+
+    // ЛОГИКА МУЛЬТИПЛЕЕРА (SOCKET.IO)
+    let myScreenMesh = null;
+
+    socket.on('init', (data) => {
+      myId = data.myId;
+      myData = data.players[myId];
+
+      // Выставляем камеру на наше место
+      const d = myData.desk;
+      camera.position.set(d.x, 1.25, d.z);
+      camera.rotation.y = d.rot;
+
+      // Спавним рабочие места и игроков
+      Object.values(data.players).forEach(p => {
+        const deskObj = createDeskSetup(p.desk, p.name);
+        if (p.id === myId) {
+          myScreenMesh = deskObj.screen;
+        } else {
+          // Создаем модельки коллег напротив
+          const hum = createHumanModel(p.appearance);
+          hum.mesh.position.set(p.desk.x, 0, p.desk.z);
+          hum.mesh.rotation.y = p.desk.rot + Math.PI; // Лицом к столу
+          scene.add(hum.mesh);
+          otherPlayers[p.id] = { ...p, model: hum };
+        }
+      });
+    });
+
+    socket.on('playerJoined', (p) => {
+      const deskObj = createDeskSetup(p.desk, p.name);
+      const hum = createHumanModel(p.appearance);
+      hum.mesh.position.set(p.desk.x, 0, p.desk.z);
+      hum.mesh.rotation.y = p.desk.rot + Math.PI;
+      scene.add(hum.mesh);
+      otherPlayers[p.id] = { ...p, model: hum };
+    });
+
+    socket.on('playerLeft', (id) => {
+      if (otherPlayers[id]) {
+        scene.remove(otherPlayers[id].model.mesh);
+        delete otherPlayers[id];
+      }
+    });
+
+    socket.on('playerTyping', (data) => {
+      if (otherPlayers[data.id]) {
+        otherPlayers[data.id].isTyping = data.isTyping;
+      }
+    });
+
     socket.on('chatMessage', (msg) => {
-      chatLogs.push(msg);
-      updateCRT();
+      chatMessages.push(msg);
+      drawTelegramUI();
     });
 
-    // Интерактив с монитором
+    // УПРАВЛЕНИЕ ОБЗОРОМ (MOUSE LOOK)
+    let lon = 0, lat = 0;
+    document.addEventListener('mousemove', (e) => {
+      if (!isLocked) return;
+      lon -= e.movementX * 0.15;
+      lat -= e.movementY * 0.15;
+      lat = Math.max(-70, Math.min(70, lat));
+
+      const phi = THREE.MathUtils.degToRad(90 - lat);
+      const theta = THREE.MathUtils.degToRad(lon + (myData ? myData.desk.rot * 180 / Math.PI : 0));
+
+      const target = new THREE.Vector3();
+      target.x = camera.position.x + Math.sin(phi) * Math.cos(theta);
+      target.y = camera.position.y + Math.cos(phi);
+      target.z = camera.position.z + Math.sin(phi) * Math.sin(theta);
+      camera.lookAt(target);
+    });
+
+    // ВЗАИМОДЕЙСТВИЕ (КЛИК ПО МОНИТОРУ)
     const raycaster = new THREE.Raycaster();
-    const mouse = new THREE.Vector2();
-    window.addEventListener('click', (e) => {
-      mouse.x = (e.clientX / window.innerWidth) * 2 - 1;
-      mouse.y = -(e.clientY / window.innerHeight) * 2 + 1;
-      raycaster.setFromCamera(mouse, camera);
-      const intersects = raycaster.intersectObject(screen);
+    window.addEventListener('click', () => {
+      if (!isLocked || !myScreenMesh) return;
+
+      raycaster.setFromCamera(new THREE.Vector2(0, 0), camera);
+      const intersects = raycaster.intersectObject(myScreenMesh);
+
       if (intersects.length > 0) {
-        document.getElementById('input-box').style.display = 'block';
+        document.exitPointerLock();
+        chatModal.style.display = 'block';
+        msgInput.focus();
+        socket.emit('typingStatus', true);
       }
     });
 
-    document.getElementById('send-btn').onclick = () => {
-      const input = document.getElementById('msg-input');
-      if (input.value.trim() !== '') {
-        socket.emit('sendToTG', { name: myName, text: input.value });
-        input.value = '';
-        document.getElementById('input-box').style.display = 'none';
-      }
-    };
+    // ОТПРАВКА СООБЩЕНИЙ
+    document.getElementById('send-btn').onclick = sendMessage;
+    msgInput.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') sendMessage();
+    });
 
-    // Анимация сигареты
+    function sendMessage() {
+      if (msgInput.value.trim() !== '') {
+        socket.emit('sendToTG', { name: myData.name, text: msgInput.value });
+        msgInput.value = '';
+        chatModal.style.display = 'none';
+        socket.emit('typingStatus', false);
+        document.body.requestPointerLock();
+      }
+    }
+
+    // ПЕРЕКУР
     let isSmoking = false;
     document.getElementById('smoke-btn').onclick = () => {
       if (isSmoking) return;
       isSmoking = true;
-      let timer = 0;
-      const smokeAnim = setInterval(() => {
-        timer += 0.1;
-        camera.position.y = 1.2 + Math.sin(timer * 4) * 0.05; // Затяжка
-        if (timer > 3) {
-          clearInterval(smokeAnim);
-          camera.position.y = 1.2;
+      let time = 0;
+      const smokeInt = setInterval(() => {
+        time += 0.05;
+        camera.position.y = 1.25 + Math.sin(time * 5) * 0.04;
+        if (time > 3) {
+          clearInterval(smokeInt);
+          camera.position.y = 1.25;
           isSmoking = false;
         }
-      }, 50);
+      }, 30);
     };
 
-    // Селфи
+    // СЕЛФИ
     document.getElementById('selfie-btn').onclick = () => {
       renderer.render(scene, camera);
       const imgData = renderer.domElement.toDataURL('image/png');
-      socket.emit('sendSelfie', { name: myName, image: imgData });
-      alert('Селфи отправлено в Telegram!');
+      socket.emit('sendSelfie', { name: myData.name, image: imgData });
+      alert('Селфи отправлено в Telegram-группу!');
     };
 
-    // Ресайз окна
+    // АНИМАЦИЯ И РЕНДЕР
+    let clock = new THREE.Clock();
+
+    function animate() {
+      requestAnimationFrame(animate);
+      const time = clock.getElapsedTime();
+
+      // Анимация печати у коллег
+      Object.values(otherPlayers).forEach(p => {
+        if (p.model) {
+          if (p.isTyping) {
+            p.model.leftArm.rotation.x = -Math.PI / 3 + Math.sin(time * 15) * 0.1;
+            p.model.rightArm.rotation.x = -Math.PI / 3 + Math.cos(time * 15) * 0.1;
+          } else {
+            p.model.leftArm.rotation.x = -Math.PI / 3;
+            p.model.rightArm.rotation.x = -Math.PI / 3;
+          }
+        }
+      });
+
+      renderer.render(scene, camera);
+    }
+    animate();
+
     window.addEventListener('resize', () => {
       camera.aspect = window.innerWidth / window.innerHeight;
       camera.updateProjectionMatrix();
       renderer.setSize(window.innerWidth, window.innerHeight);
     });
-
-    function animate() {
-      requestAnimationFrame(animate);
-      renderer.render(scene, camera);
-    }
-    animate();
   </script>
 </body>
 </html>
