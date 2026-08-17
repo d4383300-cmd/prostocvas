@@ -11,13 +11,13 @@ const io = new Server(server, { cors: { origin: '*' } });
 app.use(express.json({ limit: '50mb' }));
 app.use(express.static(path.join(__dirname, 'public')));
 
-// 12 мест (2 ряда по 6 мест со ступенчатым подъемом)
-const TOTAL_SEATS = 12;
+// Ряд 1 (0..5): Реальные игроки (спереди)
+// Ряд 2 (6..11): NPC / Бот-зрители (сзади)
 const SEAT_POSITIONS = [
-    // Нижний ряд (Row 1)
+    // Ряд 1 (Низ)
     { x: -3.0, y: 0.6, z: 1.5 }, { x: -1.8, y: 0.6, z: 1.5 }, { x: -0.6, y: 0.6, z: 1.5 },
     { x: 0.6, y: 0.6, z: 1.5 },  { x: 1.8, y: 0.6, z: 1.5 },  { x: 3.0, y: 0.6, z: 1.5 },
-    // Верхний ряд (Row 2 - подъем)
+    // Ряд 2 (Верх)
     { x: -3.0, y: 1.2, z: 4.2 }, { x: -1.8, y: 1.2, z: 4.2 }, { x: -0.6, y: 1.2, z: 4.2 },
     { x: 0.6, y: 1.2, z: 4.2 },  { x: 1.8, y: 1.2, z: 4.2 },  { x: 3.0, y: 1.2, z: 4.2 }
 ];
@@ -38,16 +38,20 @@ bot.on('message', (msg) => {
     if (msg.chat && msg.chat.id) activeChatIds.add(msg.chat.id.toString());
 });
 
-function getFreeSeatIndex() {
-    const occupied = new Set(Object.values(players).map(p => p.seatIndex));
-    for (let i = 0; i < TOTAL_SEATS; i++) {
-        if (!occupied.has(i)) return i;
+// Игроков сажаем на первые свободные места спереди (0..5)
+function getFreePlayerSeatIndex() {
+    const takenSeats = new Set(Object.values(players).map(p => p.seatIndex));
+    for (let i = 0; i < 6; i++) {
+        if (!takenSeats.has(i)) return i;
     }
-    return Math.floor(Math.random() * TOTAL_SEATS);
+    // Если 1-й ряд занят, сажаем во 2-й
+    for (let i = 6; i < 12; i++) {
+        if (!takenSeats.has(i)) return i;
+    }
+    return Math.floor(Math.random() * 6);
 }
 
-// Запрос скриншота/видео у любого текущего зрителя каждые 3 минуты
-function sendCaptureRequest() {
+function sendMediaRequest() {
     const socketIds = Object.keys(players);
     if (socketIds.length > 0) {
         const isVideo = Math.random() < 0.5;
@@ -55,8 +59,8 @@ function sendCaptureRequest() {
         io.to(targetSocket).emit('requestLiveCapture', { type: isVideo ? 'video' : 'photo' });
     } else {
         activeChatIds.forEach(chatId => {
-            bot.sendMessage(chatId, "🔥 Фильм идет прямо сейчас! Заходи в кинотеатр!", {
-                reply_markup: { inline_keyboard: [[{ text: "🎬 Войти в 3D Кинотеатр", url: WEB_APP_URL }]] }
+            bot.sendMessage(chatId, "🎬 В кинотеатре идет сеанс! Заходи скорее в 3D зал!", {
+                reply_markup: { inline_keyboard: [[{ text: "🍿 Войти в зал", url: WEB_APP_URL }]] }
             }).catch(err => console.error(err.message));
         });
     }
@@ -72,13 +76,13 @@ app.post('/api/media', (req, res) => {
     activeChatIds.forEach(chatId => {
         if (type === 'photo') {
             bot.sendPhoto(chatId, buffer, {
-                caption: "📸 Живой кадр из 3D Кинотеатра!",
-                reply_markup: { inline_keyboard: [[{ text: "🍿 Присоединиться", url: WEB_APP_URL }]] }
+                caption: "📸 Кадр из зрительного зала!",
+                reply_markup: { inline_keyboard: [[{ text: "🎬 Войти в 3D Кинотеатр", url: WEB_APP_URL }]] }
             }).catch(err => console.error(err.message));
         } else {
             bot.sendVideo(chatId, buffer, {
-                caption: "🎥 Динамический видео-ракурс из зала!",
-                reply_markup: { inline_keyboard: [[{ text: "🍿 Присоединиться", url: WEB_APP_URL }]] }
+                caption: "🎥 Динамический видео-обзор сеанса!",
+                reply_markup: { inline_keyboard: [[{ text: "🎬 Войти в 3D Кинотеатр", url: WEB_APP_URL }]] }
             }).catch(err => console.error(err.message));
         }
     });
@@ -86,11 +90,11 @@ app.post('/api/media', (req, res) => {
     res.send({ success: true });
 });
 
-setInterval(sendCaptureRequest, 180000);
+setInterval(sendMediaRequest, 180000);
 
 io.on('connection', (socket) => {
     socket.on('join', (data) => {
-        const seatIndex = getFreeSeatIndex();
+        const seatIndex = getFreePlayerSeatIndex();
         const pos = SEAT_POSITIONS[seatIndex];
 
         players[socket.id] = {
