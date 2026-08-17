@@ -10,144 +10,166 @@ app.use(express.static('public'));
 
 let players = {};
 let gameState = {
-    status: 'WAITING', // WAITING, ENTER_ANIM, GAME, RESULTS
+    status: 'WAITING',
     round: 1,
     turnIndex: 0,
     currentQuestion: null,
     timer: 10
 };
 
-const TOTAL_SEATS = 6;
-// Фиксированные позиции 3х3 (3 спереди, 3 сзади)
 const SEAT_POSITIONS = [
-    { x: -2, z: 2 }, { x: 0, z: 2 }, { x: 2, z: 2 }, // Передний ряд
-    { x: -2, z: 5 }, { x: 0, z: 5 }, { x: 2, z: 5 }  // Задний ряд
+    { x: -2.2, z: -1 }, { x: 0, z: -1 }, { x: 2.2, z: -1 }, // Передний ряд
+    { x: -2.2, z: 2.5 }, { x: 0, z: 2.5 }, { x: 2.2, z: 2.5 }  // Задний ряд
 ];
 
-function generateMathProblem(round) {
+function generateProblem(round) {
     let a, b, op, ans;
     if (round === 1) {
-        a = Math.floor(Math.random() * 10);
-        b = Math.floor(Math.random() * 10);
+        a = Math.floor(Math.random() * 8) + 1;
+        b = Math.floor(Math.random() * 8) + 1;
         op = '+'; ans = a + b;
     } else if (round <= 3) {
-        a = Math.floor(Math.random() * 20);
-        b = Math.floor(Math.random() * 20);
+        a = Math.floor(Math.random() * 15) + 5;
+        b = Math.floor(Math.random() * 15) + 1;
         op = Math.random() > 0.5 ? '+' : '-';
         ans = op === '+' ? a + b : a - b;
-    } else { // Сложные / нерешаемые примеры (Baldi style)
-        a = Math.floor(Math.random() * 900) + 100;
-        b = Math.floor(Math.random() * 900) + 100;
-        op = '*'; ans = a * b + Math.floor(Math.random() * 50); // Невозможный пример
+    } else { // Сложные / "Балди" нерешаемые примеры
+        a = Math.floor(Math.random() * 800) + 100;
+        b = Math.floor(Math.random() * 800) + 100;
+        op = 'x'; ans = 42; 
     }
     return { text: `${a} ${op} ${b} = ?`, answer: ans };
 }
 
 function broadcast(data) {
     const msg = JSON.stringify(data);
-    wss.clients.forEach(client => {
-        if (client.readyState === 1) client.send(msg);
-    });
+    wss.clients.forEach(c => { if (c.readyState === 1) c.send(msg); });
 }
 
 function startNewGame() {
     gameState.status = 'ENTER_ANIM';
     gameState.round = 1;
     gameState.turnIndex = 0;
-    
-    // Заполнение свободное мест NPC
+
+    let pKeys = Object.keys(players);
     let seatIdx = 0;
-    Object.keys(players).forEach(id => {
+
+    // Распределяем реальных игроков
+    pKeys.forEach(id => {
         players[id].seat = seatIdx++;
-        players[id].score = 0;
+        players[id].isNPC = false;
     });
+
+    // Заполняем оставшиеся парты до 6 штук NPC
+    for (let i = seatIdx; i < 6; i++) {
+        let npcId = `npc_${i}`;
+        players[npcId] = {
+            id: npcId,
+            seat: i,
+            isNPC: true,
+            name: `Бот #${i+1}`,
+            headRotation: { x: 0, y: 0 }
+        };
+    }
 
     broadcast({ type: 'START_ENTER_ANIMATION', players, gameState });
 
     setTimeout(() => {
         gameState.status = 'GAME';
         nextTurn();
-    }, 5000); // 5 сек на анимацию входа
+    }, 4500);
 }
 
 function nextTurn() {
-    const playerIds = Object.keys(players);
-    if (playerIds.length === 0) return;
+    let pKeys = Object.keys(players);
+    if (pKeys.length === 0) return;
 
-    if (gameState.turnIndex >= playerIds.length) {
+    if (gameState.turnIndex >= pKeys.length) {
         gameState.turnIndex = 0;
         gameState.round++;
         if (gameState.round > 5) {
             gameState.status = 'RESULTS';
             broadcast({ type: 'SHOW_RESULTS', players });
-            setTimeout(startNewGame, 8000);
+            setTimeout(startNewGame, 7000);
             return;
         }
     }
 
-    const currentId = playerIds[gameState.turnIndex];
-    gameState.currentQuestion = generateMathProblem(gameState.round);
+    let activeId = pKeys[gameState.turnIndex];
+    let activePlayer = players[activeId];
+    gameState.currentQuestion = generateProblem(gameState.round);
     gameState.timer = 10;
 
     broadcast({
         type: 'NEW_TURN',
-        activePlayerId: currentId,
+        activePlayerId: activeId,
+        isNPC: activePlayer.isNPC,
         question: gameState.currentQuestion.text,
-        round: gameState.round
+        round: gameState.round,
+        seat: activePlayer.seat
     });
 
-    let countdown = setInterval(() => {
+    // Автоматический ход для NPC
+    if (activePlayer.isNPC) {
+        setTimeout(() => {
+            let npcAns = gameState.round <= 3 ? gameState.currentQuestion.answer : Math.floor(Math.random() * 999);
+            broadcast({ type: 'ANSWER_SUBMITTED', id: activeId, text: npcAns });
+            
+            setTimeout(() => {
+                gameState.turnIndex++;
+                nextTurn();
+            }, 2500);
+        }, 3000 + Math.random() * 2000);
+        return;
+    }
+
+    // Таймер для реальных игроков
+    let timerInterval = setInterval(() => {
         gameState.timer--;
         broadcast({ type: 'TIMER_TICK', timer: gameState.timer });
 
         if (gameState.timer <= 0) {
-            clearInterval(countdown);
-            // Пропуск хода / Ошибка
-            broadcast({ type: 'ANSWER_RESULT', id: currentId, correct: false, text: "X_X" });
+            clearInterval(timerInterval);
+            broadcast({ type: 'ANSWER_SUBMITTED', id: activeId, text: '???' });
             gameState.turnIndex++;
-            setTimeout(nextTurn, 2000);
+            setTimeout(nextTurn, 2500);
         }
     }, 1000);
 }
 
 wss.on('connection', (ws) => {
-    const id = 'player_' + Math.random().toString(36).substr(2, 9);
-    const isNPC = false;
-
-    players[id] = { id, seat: -1, headRotation: { x: 0, y: 0 }, isNPC };
+    const id = 'player_' + Math.random().toString(36).substr(2, 6);
+    players[id] = { id, seat: -1, headRotation: { x: 0, y: 0 }, isNPC: false };
 
     ws.send(JSON.stringify({ type: 'INIT', id }));
+    startNewGame(); // Перезапуск с анимацией захода при новом подключении
 
-    // Всегда перезапускаем игру с анимацией входа при подключении нового игрока
-    startNewGame();
-
-    ws.on('message', (message) => {
-        const data = JSON.parse(message);
+    ws.on('message', (msg) => {
+        let data = JSON.parse(msg);
 
         if (data.type === 'ROTATE_HEAD') {
             if (players[id]) players[id].headRotation = data.rot;
-            broadcast({ type: 'PLAYER_HEAD_MOVED', id, rot: data.rot });
+            broadcast({ type: 'HEAD_MOVED', id, rot: data.rot });
         }
 
         if (data.type === 'SUBMIT_ANSWER') {
-            const isCorrect = parseInt(data.answer) === gameState.currentQuestion.answer;
-            if (isCorrect) players[id].score += 100;
-            
-            broadcast({ type: 'ANSWER_RESULT', id, correct: isCorrect, text: data.answer });
+            broadcast({ type: 'ANSWER_SUBMITTED', id, text: data.answer });
             gameState.turnIndex++;
             setTimeout(nextTurn, 2500);
         }
 
-        if (data.type === 'CHAT_MESSAGE') {
-            broadcast({ type: 'CHAT_BROADCAST', id: data.name || id, text: data.text });
+        if (data.type === 'CHAT') {
+            broadcast({ type: 'CHAT_MSG', id: id.substr(0, 5), text: data.text });
         }
     });
 
     ws.on('close', () => {
         delete players[id];
+        // Удаляем бота-дублера если остался
+        Object.keys(players).forEach(k => { if (players[k].isNPC) delete players[k]; });
         if (Object.keys(players).length > 0) startNewGame();
     });
 });
 
 const PORT = process.env.PORT || 3000;
-server.listen(PORT, () => console.log(`Server running on port ${PORT}`));
+server.listen(PORT, () => console.log(`Baldi Server Online on port ${PORT}`));
