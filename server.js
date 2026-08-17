@@ -8,45 +8,54 @@ const app = express();
 const server = http.createServer(app);
 const io = new Server(server, { cors: { origin: '*' } });
 
-// Поддержка больших Canvas-скриншотов от клиента
 app.use(express.json({ limit: '10mb' }));
 app.use(express.static(path.join(__dirname, 'public')));
 
-// --- ГЛОБАЛЬНЫЕ ПЕРЕМЕННЫЕ (Объявляем ВЫШЕ их использования) ---
+// --- ГЛОБАЛЬНЫЕ ПЕРЕМЕННЫЕ ---
 const MAX_SEATS = 6;
 const SEAT_POSITIONS_X = [-2.5, -1.5, -0.5, 0.5, 1.5, 2.5];
 
-let players = {}; // <--- Перенесено наверх!
+let players = {};
 let videoState = {
     url: 'https://www.youtube.com/watch?v=dQw4w9WgXcQ',
     startTime: Date.now(),
     isStreamMode: false
 };
 
+// Хранилище всех ID чатов, куда добавлен бот
+let activeChatIds = new Set(['-1004486534339']);
+
 // --- TELEGRAM BOT ---
 const BOT_TOKEN = '8161722600:AAEef8zTPXRw7-fPgkHdkVX1pQqan7I5snY';
-const CHAT_ID = '-1004486534339';
 const WEB_APP_URL = 'https://prostocvas.onrender.com/';
 
 const bot = new TelegramBot(BOT_TOKEN, { polling: true });
 
-// Запрос скриншота у первого активного игрока
+// Запоминаем новые чаты и группы, где есть бот
+bot.on('message', (msg) => {
+    if (msg.chat && msg.chat.id) {
+        activeChatIds.add(msg.chat.id.toString());
+    }
+});
+
+// Запрос скриншота у клиента
 function sendTelegramNotification() {
     const socketIds = Object.keys(players);
     if (socketIds.length > 0) {
-        // Просим клиента сделать скриншот сцены
         io.to(socketIds[0]).emit('requestScreenshot');
     } else {
-        // Если в зале никого нет — отправляем стандартный анонс
-        bot.sendMessage(CHAT_ID, "🔥 БЫСТРЕЕ ЗАХОДИМ МЫ СМОТРИМ ВИДЕО! В ТЕАТРЕ ВМЕСТЕ!", {
-            reply_markup: {
-                inline_keyboard: [[{ text: "🎬 Войти в 3D Кинотеатр", url: WEB_APP_URL }]]
-            }
-        }).catch(err => console.error("Ошибка Telegram:", err.message));
+        // Если никого нет — слать текстовый анонс во все чаты
+        activeChatIds.forEach(chatId => {
+            bot.sendMessage(chatId, "🔥 БЫСТРЕЕ ЗАХОДИМ МЫ СМОТРИМ ВИДЕО! В ТЕАТРЕ ВМЕСТЕ!", {
+                reply_markup: {
+                    inline_keyboard: [[{ text: "🎬 Войти в 3D Кинотеатр", url: WEB_APP_URL }]]
+                }
+            }).catch(err => console.error(`Ошибка Telegram (${chatId}):`, err.message));
+        });
     }
 }
 
-// Прием Canvas-скриншота от клиента и отправка в Telegram
+// Прием скриншота и рассылка ВО ВСЕ ЧАТЫ
 app.post('/api/screenshot', (req, res) => {
     const { image } = req.body;
     if (!image) return res.status(400).send("No image");
@@ -54,17 +63,18 @@ app.post('/api/screenshot', (req, res) => {
     const base64Data = image.replace(/^data:image\/png;base64,/, "");
     const imgBuffer = Buffer.from(base64Data, 'base64');
 
-    bot.sendPhoto(CHAT_ID, imgBuffer, {
-        caption: "🔥 БЫСТРЕЕ ЗАХОДИМ МЫ СМОТРИМ ВИДЕО! В ТЕАТРЕ ВМЕСТЕ!",
-        reply_markup: {
-            inline_keyboard: [[{ text: "🎬 Войти в 3D Кинотеатр", url: WEB_APP_URL }]]
-        }
-    }).catch(err => console.error("Ошибка Telegram Фото:", err.message));
+    activeChatIds.forEach(chatId => {
+        bot.sendPhoto(chatId, imgBuffer, {
+            caption: "🔥 БЫСТРЕЕ ЗАХОДИМ МЫ СМОТРИМ ВИДЕО! В ТЕАТРЕ ВМЕСТЕ!",
+            reply_markup: {
+                inline_keyboard: [[{ text: "🎬 Войти в 3D Кинотеатр", url: WEB_APP_URL }]]
+            }
+        }).catch(err => console.error(`Ошибка рассылки в ${chatId}:`, err.message));
+    });
 
     res.send({ success: true });
 });
 
-// Первичный запуск уведомлений
 sendTelegramNotification();
 setInterval(sendTelegramNotification, 120000);
 
