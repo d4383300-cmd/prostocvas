@@ -8,14 +8,14 @@ if (window.Telegram && window.Telegram.WebApp) {
     if (user) myNickname = user.username ? `@${user.username}` : user.first_name;
 }
 
-// 1. Инициализация Сцены и Рендереров
+// 1. Сцена и Рендерер
 const scene = new THREE.Scene();
 scene.background = new THREE.Color(0x040306);
 
 const cssScene = new THREE.Scene();
 const camera = new THREE.PerspectiveCamera(65, window.innerWidth / window.innerHeight, 0.1, 100);
 
-// preserveDrawingBuffer: true КРИТИЧЕСКИ ВАЖЕН, ЧТОБЫ СКРИНШОТЫ НЕ БЫЛИ ЧЕРНЫМИ
+// preserveDrawingBuffer: true — чтобы фото не было черным
 const renderer = new THREE.WebGLRenderer({ antialias: true, preserveDrawingBuffer: true });
 renderer.setSize(window.innerWidth, window.innerHeight);
 document.getElementById('webgl').appendChild(renderer.domElement);
@@ -24,33 +24,29 @@ const cssRenderer = new THREE.CSS3DRenderer();
 cssRenderer.setSize(window.innerWidth, window.innerHeight);
 document.getElementById('css3d').appendChild(cssRenderer.domElement);
 
-// 2. Освещение Зала
-const ambientLight = new THREE.AmbientLight(0xffffff, 0.3);
+// 2. Освещение
+const ambientLight = new THREE.AmbientLight(0xffffff, 0.4);
 scene.add(ambientLight);
 
-// Подсветка сцены и экрана
 const stageLight = new THREE.SpotLight(0xffaa55, 1.2);
 stageLight.position.set(0, 6, -1);
 stageLight.target.position.set(0, 2.5, -4.8);
 scene.add(stageLight);
 scene.add(stageLight.target);
 
-// 3. Архитектура Зала (Стены, Пол, Потолок)
+// 3. Архитектура Зала
 const wallMat = new THREE.MeshStandardMaterial({ color: 0x160c10, roughness: 0.9 });
 const carpetMat = new THREE.MeshStandardMaterial({ color: 0x420610, roughness: 0.7 });
 const woodMat = new THREE.MeshStandardMaterial({ color: 0x1c0e08, roughness: 0.5 });
 
-// Пол основного зала
 const mainFloor = new THREE.Mesh(new THREE.BoxGeometry(12, 0.2, 12), carpetMat);
 mainFloor.position.set(0, 0, 1);
 scene.add(mainFloor);
 
-// Подъем для второго ряда
 const stepRow2 = new THREE.Mesh(new THREE.BoxGeometry(12, 0.6, 4), woodMat);
 stepRow2.position.set(0, 0.3, 4.2);
 scene.add(stepRow2);
 
-// Стены кинотеатра
 const leftWall = new THREE.Mesh(new THREE.BoxGeometry(0.2, 7, 12), wallMat);
 leftWall.position.set(-6, 3.3, 1);
 scene.add(leftWall);
@@ -67,7 +63,6 @@ const ceiling = new THREE.Mesh(new THREE.BoxGeometry(12, 0.2, 12), wallMat);
 ceiling.position.set(0, 6.8, 1);
 scene.add(ceiling);
 
-// Настенные светильники (бра)
 function addWallLamp(x, y, z) {
     const lamp = new THREE.Mesh(new THREE.BoxGeometry(0.2, 0.4, 0.2), new THREE.MeshBasicMaterial({ color: 0xffaa33 }));
     lamp.position.set(x, y, z);
@@ -82,7 +77,7 @@ addWallLamp(-5.8, 3.5, 3);
 addWallLamp(5.8, 3.5, -1);
 addWallLamp(5.8, 3.5, 3);
 
-// 4. Экран Кинотеатра
+// 4. Экран
 const screenFrame = new THREE.Mesh(new THREE.BoxGeometry(8.4, 4.9, 0.1), woodMat);
 screenFrame.position.set(0, 2.8, -4.95);
 scene.add(screenFrame);
@@ -92,7 +87,6 @@ const screenMesh = new THREE.Mesh(new THREE.PlaneGeometry(8, 4.5), screenMat);
 screenMesh.position.set(0, 2.8, -4.89);
 scene.add(screenMesh);
 
-// CSS3D Iframe
 const iframe = document.createElement('iframe');
 iframe.style.width = '800px';
 iframe.style.height = '450px';
@@ -106,7 +100,6 @@ cssScene.add(cssObject);
 
 const textureLoader = new THREE.TextureLoader();
 
-// Очищаем ссылку от лишних query-параметров, чтобы превью грузилось без CORS-ошибки
 function parseVideoUrl(url, time = 0) {
     if (url.includes('youtube.com') || url.includes('youtu.be')) {
         let cleanUrl = url.split('?')[0];
@@ -134,7 +127,7 @@ function updateVideoFrame(url, time) {
     iframe.src = parseVideoUrl(url, time);
 }
 
-// 5. Места и Кресла
+// 5. Места
 const SEAT_POSITIONS = [
     { x: -3.0, y: 0.6, z: 1.5 }, { x: -1.8, y: 0.6, z: 1.5 }, { x: -0.6, y: 0.6, z: 1.5 },
     { x: 0.6, y: 0.6, z: 1.5 },  { x: 1.8, y: 0.6, z: 1.5 },  { x: 3.0, y: 0.6, z: 1.5 },
@@ -149,8 +142,8 @@ SEAT_POSITIONS.forEach(pos => {
     const chair = new THREE.Group();
     const seat = new THREE.Mesh(new THREE.BoxGeometry(0.7, 0.12, 0.6), chairMat);
     seat.position.set(0, 0.2, 0);
-    const back = new THREE.Mesh(new THREE.BoxGeometry(0.7, 0.75, 0.12), chairMat);
-    back.position.set(0, 0.55, 0.25);
+    const back = new THREE.Mesh(new THREE.BoxGeometry(0.7, 0.85, 0.12), chairMat);
+    back.position.set(0, 0.6, 0.25);
     const armL = new THREE.Mesh(new THREE.BoxGeometry(0.1, 0.3, 0.5), armMat);
     armL.position.set(-0.38, 0.35, 0);
     const armR = armL.clone();
@@ -161,7 +154,7 @@ SEAT_POSITIONS.forEach(pos => {
     scene.add(chair);
 });
 
-// 6. Персонажи
+// 6. Улучшенные Модельки (ВЫШЕ + С ГЛАЗАМИ)
 const skinColors = [0xffdbac, 0xf1c27d, 0xe0ac69, 0x8d5524];
 const hairColors = [0x090806, 0x2c222b, 0x716355, 0xa52a2a];
 const shirtColors = [0x1565c0, 0x2e7d32, 0xc62828, 0x6a1b9a, 0xef6c00];
@@ -174,38 +167,51 @@ function createPersonModel(nickname, shirtColor = 0x1565c0) {
     const bodyMat = new THREE.MeshStandardMaterial({ color: shirtColor });
     const skinMat = new THREE.MeshStandardMaterial({ color: skin });
     const hairMat = new THREE.MeshStandardMaterial({ color: hair });
+    const eyeWhiteMat = new THREE.MeshBasicMaterial({ color: 0xffffff });
+    const eyePupilMat = new THREE.MeshBasicMaterial({ color: 0x000000 });
 
-    // Тело
-    const body = new THREE.Mesh(new THREE.BoxGeometry(0.45, 0.5, 0.25), bodyMat);
-    body.position.set(0, -0.1, 0);
+    // Тело (Сделали ВЫШЕ: 0.65 вместо 0.5)
+    const body = new THREE.Mesh(new THREE.BoxGeometry(0.48, 0.65, 0.26), bodyMat);
+    body.position.set(0, 0.05, 0);
     group.add(body);
 
     // Голова
     const headGroup = new THREE.Group();
     headGroup.name = "headGroup";
-    headGroup.position.set(0, 0.25, 0);
+    headGroup.position.set(0, 0.5, 0);
 
-    const head = new THREE.Mesh(new THREE.BoxGeometry(0.26, 0.26, 0.26), skinMat);
-    const hairMesh = new THREE.Mesh(new THREE.BoxGeometry(0.28, 0.08, 0.28), hairMat);
-    hairMesh.position.set(0, 0.14, 0);
+    const head = new THREE.Mesh(new THREE.BoxGeometry(0.28, 0.28, 0.28), skinMat);
+    const hairMesh = new THREE.Mesh(new THREE.BoxGeometry(0.30, 0.09, 0.30), hairMat);
+    hairMesh.position.set(0, 0.15, 0);
 
-    headGroup.add(head, hairMesh);
+    // --- ДОБАВЛЯЕМ ГЛАЗА ---
+    const eyeLeft = new THREE.Mesh(new THREE.BoxGeometry(0.06, 0.06, 0.02), eyeWhiteMat);
+    eyeLeft.position.set(-0.07, 0.03, -0.145);
+    const pupilLeft = new THREE.Mesh(new THREE.BoxGeometry(0.03, 0.03, 0.025), eyePupilMat);
+    pupilLeft.position.set(-0.07, 0.03, -0.148);
+
+    const eyeRight = new THREE.Mesh(new THREE.BoxGeometry(0.06, 0.06, 0.02), eyeWhiteMat);
+    eyeRight.position.set(0.07, 0.03, -0.145);
+    const pupilRight = new THREE.Mesh(new THREE.BoxGeometry(0.03, 0.03, 0.025), eyePupilMat);
+    pupilRight.position.set(0.07, 0.03, -0.148);
+
+    headGroup.add(head, hairMesh, eyeLeft, pupilLeft, eyeRight, pupilRight);
     group.add(headGroup);
 
-    // Руки
-    const armL = new THREE.Mesh(new THREE.BoxGeometry(0.1, 0.38, 0.1), bodyMat);
-    armL.position.set(-0.28, -0.05, 0.05);
+    // Руки (Сделаны длиннее под рост)
+    const armL = new THREE.Mesh(new THREE.BoxGeometry(0.1, 0.48, 0.1), bodyMat);
+    armL.position.set(-0.30, 0.08, 0.05);
     armL.rotation.x = -0.2;
     const armR = armL.clone();
-    armR.position.x = 0.28;
+    armR.position.x = 0.30;
     group.add(armL, armR);
 
-    // Никнейм
+    // Плашка с именем
     const canvas = document.createElement('canvas');
     canvas.width = 256; canvas.height = 128;
     const texture = new THREE.CanvasTexture(canvas);
     const sprite = new THREE.Sprite(new THREE.SpriteMaterial({ map: texture }));
-    sprite.position.set(0, 0.75, 0);
+    sprite.position.set(0, 1.05, 0);
     sprite.scale.set(1.4, 0.7, 1);
     group.add(sprite);
 
@@ -232,7 +238,7 @@ function updateLabel(group, msg) {
     texture.needsUpdate = true;
 }
 
-// 7. Расстановка NPC во Второй Ряд (Места 6..11)
+// 7. NPC на Втором Ряду (Места 6..11)
 const npcNames = ['Алексей', 'Мария', 'Дмитрий', 'Елена', 'Кирилл', 'Ольга'];
 const activeNPCs = [];
 
@@ -249,7 +255,6 @@ function initBackRowNPCs() {
 }
 initBackRowNPCs();
 
-// Реакции NPC
 const reactions = ['🔥', '🍿', '😂', '👏', '😱', '👍'];
 setInterval(() => {
     if (activeNPCs.length > 0) {
@@ -260,7 +265,7 @@ setInterval(() => {
     }
 }, 4000);
 
-// 8. Управление Камерой и Кадры
+// 8. Камера и Захват ФОТО от Экрана
 let yaw = 0, pitch = 0;
 let myId = null, mySeatIndex = null, myMesh = null;
 let remotePlayers = {};
@@ -303,70 +308,35 @@ document.addEventListener('touchmove', (e) => {
     }
 });
 
-// Захват кадра: камера переходит в обзорный режим над всем залом
-socket.on('requestLiveCapture', (data) => {
+// ТОЛЬКО ФОТО: Вид прямо от экрана на ВСЕХ зрителей (все 12 мест влезают)
+socket.on('requestLiveCapture', () => {
     const oldPos = camera.position.clone();
     const oldRot = camera.rotation.clone();
+    const oldFov = camera.fov;
 
-    if (data.type === 'photo') {
-        // Вид сзади сверху на весь зал и всех зрителей
-        camera.position.set(0, 3.2, 6.2);
-        camera.lookAt(0, 1.8, -4.8);
-        renderer.render(scene, camera);
+    // Устанавливаем широкую камеру перед экраном
+    camera.fov = 75;
+    camera.updateProjectionMatrix();
+    camera.position.set(0, 2.2, -4.5);
+    camera.lookAt(0, 1.2, 3.0);
 
-        const imgData = renderer.domElement.toDataURL('image/png');
+    renderer.render(scene, camera);
+    const imgData = renderer.domElement.toDataURL('image/png');
 
-        camera.position.copy(oldPos);
-        camera.rotation.copy(oldRot);
+    // Возвращаем камеру игроку
+    camera.fov = oldFov;
+    camera.updateProjectionMatrix();
+    camera.position.copy(oldPos);
+    camera.rotation.copy(oldRot);
 
-        fetch('/api/media', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ type: 'photo', data: imgData })
-        });
-    } else {
-        const stream = renderer.domElement.captureStream(30);
-        const recorder = new MediaRecorder(stream, { mimeType: 'video/webm' });
-        const chunks = [];
-
-        recorder.ondataavailable = e => chunks.push(e.data);
-        recorder.onstop = () => {
-            const blob = new Blob(chunks, { type: 'video/webm' });
-            const reader = new FileReader();
-            reader.readAsDataURL(blob);
-            reader.onloadend = () => {
-                fetch('/api/media', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ type: 'video', data: reader.result })
-                });
-            };
-            camera.position.copy(oldPos);
-            camera.rotation.copy(oldRot);
-        };
-
-        recorder.start();
-
-        let elapsed = 0;
-        const animInterval = setInterval(() => {
-            elapsed += 0.1;
-            if (elapsed < 3) {
-                // Плавный пролет над всем залом
-                camera.position.set(-3.5, 2.5, 5.0);
-                camera.lookAt(1.5, 1.2, 0.0);
-            } else if (elapsed < 6) {
-                camera.position.set(0, 3.2, 6.2);
-                camera.lookAt(0, 1.8, -4.8);
-            } else {
-                clearInterval(animInterval);
-                recorder.stop();
-            }
-            renderer.render(scene, camera);
-        }, 100);
-    }
+    fetch('/api/media', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ data: imgData })
+    });
 });
 
-// 9. Чат и Взаимодействие
+// 9. Чат
 const chatInputContainer = document.getElementById('chatInputContainer');
 const chatInput = document.getElementById('chatInput');
 const chatHistory = document.getElementById('chatHistory');
@@ -407,7 +377,7 @@ function submitVideoUrl() {
     }
 }
 
-// 10. Подключение и Сеть
+// 10. Сеть
 socket.emit('join', { nickname: myNickname });
 
 socket.on('init', (data) => {
@@ -415,8 +385,7 @@ socket.on('init', (data) => {
     mySeatIndex = data.seatIndex;
     const pos = SEAT_POSITIONS[mySeatIndex];
 
-    // Уровень глаз игрока
-    camera.position.set(pos.x, pos.y + 0.35, pos.z);
+    camera.position.set(pos.x, pos.y + 0.45, pos.z);
     camera.rotation.set(0, 0, 0);
 
     myMesh = createPersonModel(myNickname, 0x2e7d32);
@@ -468,7 +437,7 @@ function addRemotePlayer(p) {
     remotePlayers[p.id] = { mesh };
 }
 
-// 11. Основной Цикл Рендера
+// 11. Рендер
 function animate() {
     requestAnimationFrame(animate);
     renderer.render(scene, camera);
