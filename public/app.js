@@ -67,20 +67,17 @@ const wallMat = new THREE.MeshStandardMaterial({ map: createProceduralTexture('w
 const doorMat = new THREE.MeshStandardMaterial({ map: createProceduralTexture('door') });
 
 // --- Environment Construction ---
-// Main Room
 const roomGroup = new THREE.Group();
 const floor = new THREE.Mesh(new THREE.PlaneGeometry(10, 10), new THREE.MeshStandardMaterial({ color: 0x111111 }));
 floor.rotation.x = -Math.PI / 2;
 roomGroup.add(floor);
 
-// Left/Right Corridors (Pitch Black)
 const leftCorridor = new THREE.Mesh(new THREE.BoxGeometry(10, 4, 3), new THREE.MeshBasicMaterial({ color: 0x000000 }));
 leftCorridor.position.set(-9, 2, 0);
 const rightCorridor = leftCorridor.clone();
 rightCorridor.position.set(9, 2, 0);
 scene.add(leftCorridor, rightCorridor);
 
-// Doors & Buttons
 let doors = {
   left: { mesh: new THREE.Mesh(new THREE.BoxGeometry(0.2, 3.5, 2), doorMat), closed: false, btnPos: new THREE.Vector3(-4, 1, -1.5) },
   right: { mesh: new THREE.Mesh(new THREE.BoxGeometry(0.2, 3.5, 2), doorMat), closed: false, btnPos: new THREE.Vector3(4, 1, -1.5) }
@@ -90,7 +87,6 @@ doors.left.mesh.position.set(-4.9, 1.75, 0);
 doors.right.mesh.position.set(4.9, 1.75, 0);
 roomGroup.add(doors.left.mesh, doors.right.mesh);
 
-// Interactive Buttons
 const btnGeo = new THREE.BoxGeometry(0.3, 0.4, 0.1);
 const btnMat = new THREE.MeshBasicMaterial({ color: 0xff0000 });
 const btnLeft = new THREE.Mesh(btnGeo, btnMat);
@@ -99,7 +95,6 @@ const btnRight = new THREE.Mesh(btnGeo, btnMat);
 btnRight.position.copy(doors.right.btnPos);
 roomGroup.add(btnLeft, btnRight);
 
-// Lights
 const roomLight = new THREE.PointLight(0xffaa55, 1, 8);
 roomLight.position.set(0, 3, 0);
 roomGroup.add(roomLight);
@@ -116,7 +111,6 @@ const tvScreen = new THREE.Mesh(new THREE.PlaneGeometry(1.8, 1), tvScreenMat);
 tvScreen.position.set(0, 2, -4.69);
 scene.add(tvMesh, tvScreen);
 
-// Rules Canvas for Prep Phase
 const rulesCanvas = document.createElement('canvas');
 rulesCanvas.width = 512; rulesCanvas.height = 512;
 const rCtx = rulesCanvas.getContext('2d');
@@ -131,28 +125,130 @@ rCtx.fillText("4. У вас 4 секунды до его прихода.", 20, 2
 rCtx.fillText("5. Следите за ТВ-камерами!", 20, 260);
 const rulesTexture = new THREE.CanvasTexture(rulesCanvas);
 
-// --- Player Setup & Controls ---
+// --- Player Setup ---
 const player = new THREE.Object3D();
 player.position.set(0, 1.6, 0);
 scene.add(player);
 player.add(camera);
 
+// --- IMPROVED CONTROLS SYSTEM ---
 let keyState = {};
+let moveVector = { x: 0, z: 0 };
+
+// 1. Mouse Look (PC Pointer Lock)
+let pitch = 0, yaw = 0;
+container.addEventListener('click', () => {
+  if (!isMobile) container.requestPointerLock();
+});
+
+document.addEventListener('mousemove', (e) => {
+  if (document.pointerLockElement === container) {
+    yaw -= e.movementX * 0.002;
+    pitch -= e.movementY * 0.002;
+    pitch = Math.max(-Math.PI / 3, Math.min(Math.PI / 3, pitch));
+    player.rotation.y = yaw;
+    camera.rotation.x = pitch;
+  }
+});
+
 window.addEventListener('keydown', e => keyState[e.code] = true);
 window.addEventListener('keyup', e => keyState[e.code] = false);
 
-// Touch Support
+// 2. Touch Joystick (Mobile)
 let isMobile = 'ontouchstart' in window;
-if (isMobile) document.getElementById('touch-zone').style.display = 'block';
+const touchZone = document.getElementById('touch-zone');
+const stick = document.getElementById('stick');
+
+if (isMobile) {
+  touchZone.style.display = 'block';
+  let touchId = null;
+  let startX = 0, startY = 0;
+
+  touchZone.addEventListener('touchstart', (e) => {
+    const touch = e.changedTouches[0];
+    touchId = touch.identifier;
+    startX = touch.clientX;
+    startY = touch.clientY;
+  });
+
+  touchZone.addEventListener('touchmove', (e) => {
+    for (let i = 0; i < e.changedTouches.length; i++) {
+      if (e.changedTouches[i].identifier === touchId) {
+        const touch = e.changedTouches[i];
+        const dx = touch.clientX - startX;
+        const dy = touch.clientY - startY;
+        const dist = Math.min(Math.hypot(dx, dy), 40);
+        const angle = Math.atan2(dy, dx);
+        
+        const stickX = Math.cos(angle) * dist;
+        const stickY = Math.sin(angle) * dist;
+        stick.style.transform = `translate(${stickX}px, ${stickY}px)`;
+        
+        moveVector.x = stickX / 40;
+        moveVector.z = stickY / 40;
+      }
+    }
+  });
+
+  const resetJoystick = (e) => {
+    for (let i = 0; i < e.changedTouches.length; i++) {
+      if (e.changedTouches[i].identifier === touchId) {
+        stick.style.transform = `translate(0px, 0px)`;
+        moveVector.x = 0;
+        moveVector.z = 0;
+        touchId = null;
+      }
+    }
+  };
+
+  touchZone.addEventListener('touchend', resetJoystick);
+  touchZone.addEventListener('touchcancel', resetJoystick);
+
+  // Touch Look (Right side of screen)
+  let lookTouchId = null, lastLookX = 0, lastLookY = 0;
+  window.addEventListener('touchstart', (e) => {
+    for (let i = 0; i < e.changedTouches.length; i++) {
+      const t = e.changedTouches[i];
+      if (t.clientX > window.innerWidth / 2 && lookTouchId === null) {
+        lookTouchId = t.identifier;
+        lastLookX = t.clientX;
+        lastLookY = t.clientY;
+      }
+    }
+  });
+
+  window.addEventListener('touchmove', (e) => {
+    for (let i = 0; i < e.changedTouches.length; i++) {
+      const t = e.changedTouches[i];
+      if (t.identifier === lookTouchId) {
+        const dx = t.clientX - lastLookX;
+        const dy = t.clientY - lastLookY;
+        yaw -= dx * 0.005;
+        pitch -= dy * 0.005;
+        pitch = Math.max(-Math.PI / 3, Math.min(Math.PI / 3, pitch));
+        player.rotation.y = yaw;
+        camera.rotation.x = pitch;
+        lastLookX = t.clientX;
+        lastLookY = t.clientY;
+      }
+    }
+  });
+
+  const resetLook = (e) => {
+    for (let i = 0; i < e.changedTouches.length; i++) {
+      if (e.changedTouches[i].identifier === lookTouchId) lookTouchId = null;
+    }
+  };
+  window.addEventListener('touchend', resetLook);
+  window.addEventListener('touchcancel', resetLook);
+}
 
 // --- Game Logic Variables ---
-let gameState = 'PREP'; // 'PREP' or 'GAME'
+let gameState = 'PREP';
 let prepTimer = 60;
 let monsterTimer = 4;
-let monsterSide = 'left'; // 'left' or 'right'
-let cameraViews = [];
+let monsterSide = 'left';
 
-// Networked Players Models
 let otherPlayers = {};
 
 function createPlayerModel() {
@@ -163,11 +259,10 @@ function createPlayerModel() {
   return group;
 }
 
-// --- Door Toggle Logic ---
 function toggleDoor(side) {
   if (side === 'left') {
     doors.left.closed = !doors.left.closed;
-    if (doors.left.closed) doors.right.closed = false; // Closed only one!
+    if (doors.left.closed) doors.right.closed = false;
   } else {
     doors.right.closed = !doors.right.closed;
     if (doors.right.closed) doors.left.closed = false;
@@ -203,11 +298,8 @@ socket.on('playerDisconnected', (id) => {
   }
 });
 
-socket.on('chatMessage', (data) => {
-  showBubble(data.id, data.msg);
-});
+socket.on('chatMessage', (data) => { showBubble(data.id, data.msg); });
 
-// Roblox-Style Chat Bubbles
 function showBubble(id, text) {
   let bubble = document.getElementById(`bubble-${id}`);
   if (!bubble) {
@@ -235,7 +327,6 @@ function updateBubbles() {
   });
 }
 
-// Chat Input
 document.getElementById('chat-btn').addEventListener('click', sendChat);
 document.getElementById('chat-input').addEventListener('keydown', (e) => { if (e.key === 'Enter') sendChat(); });
 
@@ -260,18 +351,15 @@ setInterval(() => {
     }
   } else if (gameState === 'GAME') {
     monsterTimer--;
-    
-    // Play Footstep Stereo Sound based on proximity/time
     const pan = monsterSide === 'left' ? -0.8 : 0.8;
     playAudio('step', pan);
 
     if (monsterTimer <= 0) {
-      // Check Win/Loss
       if (doors[monsterSide].closed) {
-        playAudio('scream', pan); // Monster screams at closed door
-        document.getElementById('status-display').innerText = "ОБОРВАЛОСЬ! Монстр ушел. Ожидайте следующего...";
+        playAudio('scream', pan);
+        document.getElementById('status-display').innerText = "ОБОРВАЛОСЬ! Монстр ушел. Ожидайте...";
       } else {
-        document.getElementById('status-display').innerText = "ТЕБЯ ПОЙМАЛИ! Игра перезапускается...";
+        document.getElementById('status-display').innerText = "ТЕБЯ ПОЙМАЛИ! Перезапуск...";
         gameState = 'PREP';
         prepTimer = 10;
       }
@@ -283,34 +371,36 @@ setInterval(() => {
   }
 }, 1000);
 
-// TV Camera Switcher
 let camIndex = 0;
-setInterval(() => {
-  camIndex = (camIndex + 1) % 3;
-}, 4000);
+setInterval(() => { camIndex = (camIndex + 1) % 3; }, 4000);
 
-// Game Loop
+// --- Animation Loop ---
 function animate() {
   requestAnimationFrame(animate);
 
-  // Movement Logic
   const speed = 0.08;
+  
+  // Keyboard Movement
   if (keyState['KeyW']) player.translateZ(-speed);
   if (keyState['KeyS']) player.translateZ(speed);
   if (keyState['KeyA']) player.translateX(-speed);
   if (keyState['KeyD']) player.translateX(speed);
 
-  // Keep player inside room bounds
+  // Touch Joystick Movement
+  if (isMobile && (moveVector.x !== 0 || moveVector.z !== 0)) {
+    player.translateX(moveVector.x * speed);
+    player.translateZ(moveVector.z * speed);
+  }
+
+  // Room limits
   player.position.x = THREE.MathUtils.clamp(player.position.x, -4.5, 4.5);
   player.position.z = THREE.MathUtils.clamp(player.position.z, -4.5, 4.5);
 
   socket.emit('playerMove', { x: player.position.x, z: player.position.z, yaw: player.rotation.y });
 
-  // Update Door Animations
   doors.left.mesh.position.z = THREE.MathUtils.lerp(doors.left.mesh.position.z, doors.left.closed ? 0 : -2, 0.1);
   doors.right.mesh.position.z = THREE.MathUtils.lerp(doors.right.mesh.position.z, doors.right.closed ? 0 : -2, 0.1);
 
-  // Check Interaction Proximity
   const distLeft = player.position.distanceTo(doors.left.btnPos);
   const distRight = player.position.distanceTo(doors.right.btnPos);
   const btnUI = document.getElementById('interact-btn');
@@ -319,18 +409,17 @@ function animate() {
     btnUI.style.display = 'flex';
     if (keyState['KeyE']) {
       toggleDoor(distLeft < 2 ? 'left' : 'right');
-      keyState['KeyE'] = false; // debounce
+      keyState['KeyE'] = false;
     }
   } else {
     btnUI.style.display = 'none';
   }
 
-  // --- TV Monitor Rendering ---
+  // TV Monitor Render
   if (gameState === 'PREP') {
     tvScreen.material.map = rulesTexture;
   } else {
     tvScreen.material.map = tvTarget.texture;
-    // Set TV Camera views: 0 = Overhead Room, 1 = Left Monster POV, 2 = Right Monster POV
     if (camIndex === 0) {
       tvCamera.position.set(0, 4.5, 0);
       tvCamera.lookAt(0, 0, 0);
@@ -342,7 +431,7 @@ function animate() {
       tvCamera.lookAt(player.position);
     }
 
-    tvMesh.visible = false; tvScreen.visible = false; // Hide TV during render pass
+    tvMesh.visible = false; tvScreen.visible = false;
     renderer.setRenderTarget(tvTarget);
     renderer.render(scene, tvCamera);
     renderer.setRenderTarget(null);
@@ -353,7 +442,7 @@ function animate() {
   renderer.render(scene, camera);
 }
 
-btnUI = document.getElementById('interact-btn');
+const btnUI = document.getElementById('interact-btn');
 btnUI.addEventListener('click', () => {
   if (player.position.distanceTo(doors.left.btnPos) < 2) toggleDoor('left');
   else if (player.position.distanceTo(doors.right.btnPos) < 2) toggleDoor('right');
