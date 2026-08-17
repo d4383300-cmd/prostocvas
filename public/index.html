@@ -2,117 +2,186 @@
 <html lang="ru">
 <head>
   <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Прослушка</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+  <title>Прослушка - Vista Edition</title>
   <link rel="stylesheet" href="style.css">
-  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;800&display=swap" rel="stylesheet">
 </head>
 <body>
 
-  <!-- Экран анимации запуска -->
+  <!-- Заставка запуска -->
   <div id="splash-screen">
-    <h1 id="splash-title">Прослушка</h1>
-  </div>
-
-  <!-- Главное меню -->
-  <div id="main-menu" class="hidden">
-    <div class="menu-card">
-      <h2>ПРОСЛУШКА</h2>
-      <div class="button-grid">
-        <button onclick="openTab('chat-tab')">💬 Общий чат</button>
-        <button onclick="openTab('profile-tab')">👤 Профиль</button>
-        <button onclick="openTab('casino-tab')">🎰 Казино</button>
-        <button onclick="openTab('shop-tab')">🛒 Магазин</button>
-      </div>
+    <div class="vista-glass-card">
+      <h1 id="splash-title">ПРОСЛУШКА</h1>
+      <p class="subtitle">Windows Vista Amber Edition</p>
     </div>
   </div>
 
-  <!-- Вкладка: Общий чат -->
-  <div id="chat-tab" class="tab-content hidden">
-    <div class="chat-header">
-      <button class="back-btn" onclick="openTab('main-menu')">← Меню</button>
-      <h3>Общий Чат</h3>
-      <button id="call-btn" onclick="toggleCall()">📞 Общий звонок</button>
-    </div>
-
-    <!-- Область вызова WebRTC -->
-    <div id="call-overlay" class="hidden">
-      <div class="call-status">
-        <span>Статус: <strong id="call-state">В звонке</strong></span>
-        <button id="mic-btn" onclick="toggleMic()">🎤 Микрофон: ВКЛ</button>
+  <!-- Главный контейнер сайта -->
+  <div id="app-window">
+    
+    <!-- Заголовок стиля Vista -->
+    <div class="vista-titlebar">
+      <div class="title-text">🟡 Прослушка v2.0</div>
+      <div class="window-controls">
+        <span class="win-btn">_</span>
+        <span class="win-btn">□</span>
+        <span class="win-btn close-btn">✕</span>
       </div>
-      <div id="audio-container"></div>
     </div>
 
-    <div id="chat-messages"></div>
-
-    <div class="chat-input-area">
-      <input type="text" id="chat-input" maxlength="300" placeholder="Напишите сообщение..." onkeydown="if(event.key==='Enter') sendMessage()">
-      <button onclick="sendMessage()">Отправить</button>
+    <!-- Главное Меню -->
+    <div id="main-menu" class="view-panel">
+      <div class="menu-content">
+        <h2>ГЛАВНОЕ МЕНЮ</h2>
+        <div class="gold-buttons">
+          <button onclick="openTab('chat-tab')">💬 Общий чат</button>
+          <button onclick="openTab('rules-tab')">📜 Правила чата</button>
+          <button onclick="openTab('profile-tab')">👤 Профиль</button>
+          <button onclick="openTab('casino-tab')">🎰 Казино</button>
+          <button onclick="openTab('shop-tab')">🛒 Магазин</button>
+        </div>
+      </div>
     </div>
+
+    <!-- Вкладка: Общий чат -->
+    <div id="chat-tab" class="view-panel hidden">
+      <div class="panel-header">
+        <button class="vista-btn back" onclick="openTab('main-menu')">← Меню</button>
+        <h3>Общий Чат</h3>
+        <button id="call-toggle-btn" class="vista-btn gold" onclick="toggleCall()">📞 Звонок (<span id="call-user-count">0</span>)</button>
+      </div>
+
+      <!-- Панель управления звонком -->
+      <div id="call-bar" class="hidden">
+        <div class="call-info">
+          <span>🟢 В звонке: <strong id="call-count-val">0</strong> чел.</span>
+          <button id="mic-btn" class="vista-btn" onclick="toggleMic()">🎤 Мик: ВКЛ</button>
+          <button class="vista-btn red" onclick="leaveCall()">🚪 Выйти</button>
+        </div>
+        <div id="audio-streams"></div>
+      </div>
+
+      <div id="chat-messages"></div>
+
+      <div class="chat-input-bar">
+        <input type="text" id="chat-input" maxlength="300" placeholder="Написать сообщение..." onkeydown="if(event.key==='Enter') sendMessage()">
+        <button class="vista-btn gold" onclick="sendMessage()">Отправить</button>
+      </div>
+    </div>
+
+    <!-- Вкладка: Правила чата -->
+    <div id="rules-tab" class="view-panel hidden">
+      <div class="panel-header">
+        <button class="vista-btn back" onclick="openTab('main-menu')">← Меню</button>
+        <h3>Правила чата</h3>
+      </div>
+      <div class="scrollable-content rules-body">
+        <h3>🗓 Правила чата Cozy Corner</h3>
+        
+        <p><strong>🤝 Уважение к игрокам</strong><br>
+        Запрещены оскорбления, травля, провокации и конфликты.<br>
+        <span class="badge-punish">Мут 10–30 минут 🔇</span></p>
+
+        <p><strong>🚫 Без спама и флуда</strong><br>
+        Не засоряйте чат одинаковыми сообщениями, рекламой и ссылками, не писать по 1 сообщению строчкой.<br>
+        <span class="badge-punish">Мут 40 минут 🔇</span></p>
+
+        <p><strong>🔞 Запрещён 18+ контент</strong><br>
+        Любые материалы, сообщения, фото или видео с непристойным содержанием запрещены.<br>
+        <span class="badge-punish">Варн ⚠️ / Мут 2 часа 🔇</span></p>
+
+        <p><strong>👤 Слушайтесь администрации</strong><br>
+        Администраторы и модераторы следят за порядком. Не спорьте с их решениями.<br>
+        <span class="badge-punish">Мут 15 минут 🔇</span></p>
+
+        <p><strong>🕊️ ПОЛИТИКА</strong><br>
+        Запрещено обсуждать политиков, партии, политические события и международные конфликты. Подобные темы часто приводят к конфликтам между участниками.<br>
+        <span class="badge-punish">Предупреждение ⚠️ варн / Мут 1 час 🔇</span></p>
+
+        <p><strong>☪️✝️ Религия</strong><br>
+        Трогать религию запрещено.<br>
+        <span class="badge-punish">Мут 50 минут 🔇</span></p>
+      </div>
+    </div>
+
+    <!-- Вкладка: Профиль -->
+    <div id="profile-tab" class="view-panel hidden">
+      <div class="panel-header">
+        <button class="vista-btn back" onclick="openTab('main-menu')">← Меню</button>
+        <h3>Мой Профиль</h3>
+      </div>
+      <div class="scrollable-content">
+        <div class="vista-box">
+          <p>Никнейм: <strong id="profile-nick">Загрузка...</strong></p>
+          <p>Мой ID на сайте: <strong id="profile-site-id">----</strong></p>
+          <p>Баланс: <strong id="profile-balance">0</strong> 🌾 Травы</p>
+          <p>Статус: <strong id="profile-admin-status">Пользователь</strong></p>
+        </div>
+        <div class="vista-box margin-top">
+          <h4>Привязать Telegram</h4>
+          <button class="vista-btn gold full-width" onclick="generateAuthLink()">🔗 Получить ссылку привязки</button>
+          <div id="auth-link-box" class="hidden"></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Вкладка: Казино -->
+    <div id="casino-tab" class="view-panel hidden">
+      <div class="panel-header">
+        <button class="vista-btn back" onclick="openTab('main-menu')">← Меню</button>
+        <h3>Казино "Больше / Меньше"</h3>
+      </div>
+      <div class="scrollable-content text-center">
+        <div class="vista-box">
+          <p>Ваш баланс: <strong class="user-balance-val">0</strong> 🌾</p>
+          <input type="number" id="casino-bet" placeholder="Размер ставки" min="1">
+          <div class="btn-group">
+            <button class="vista-btn gold" onclick="playCasino('less')">Меньше 50</button>
+            <button class="vista-btn gold" onclick="playCasino('more')">Больше 50</button>
+          </div>
+          <div id="casino-result"></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Вкладка: Магазин -->
+    <div id="shop-tab" class="view-panel hidden">
+      <div class="panel-header">
+        <button class="vista-btn back" onclick="openTab('main-menu')">← Меню</button>
+        <h3>Магазин</h3>
+      </div>
+      <div class="scrollable-content shop-grid">
+        <div class="shop-item vista-box">
+          <h4>Галочка ✔️</h4>
+          <p>3000 Травы</p>
+          <button class="vista-btn gold" onclick="buyItem('verified', 3000)">Купить</button>
+        </div>
+        <div class="shop-item vista-box">
+          <h4>Радужный Ник 🌈</h4>
+          <p>3000 Травы</p>
+          <button class="vista-btn gold" onclick="buyItem('rainbow', 3000)">Купить</button>
+        </div>
+        <div class="shop-item vista-box">
+          <h4>Черный Светящийся ✨</h4>
+          <p>100 Травы</p>
+          <button class="vista-btn gold" onclick="buyItem('black_glow', 100)">Купить</button>
+        </div>
+        <div class="shop-item vista-box">
+          <h4>Белый Светящийся ❄️</h4>
+          <p>50 Травы</p>
+          <button class="vista-btn gold" onclick="buyItem('white_glow', 50)">Купить</button>
+        </div>
+      </div>
+    </div>
+
   </div>
 
-  <!-- Вкладка: Профиль -->
-  <div id="profile-tab" class="tab-content hidden">
-    <div class="tab-header">
-      <button class="back-btn" onclick="openTab('main-menu')">← Меню</button>
-      <h3>Профиль</h3>
-    </div>
-    <div class="profile-card">
-      <p>Ваш Ник: <strong id="profile-nickname">Гость</strong></p>
-      <p>Баланс: <span id="profile-balance">0</span> 🌾 Травы</p>
-      <hr>
-      <div id="link-section">
-        <button onclick="generateLinkCode()">🔗 Привязать аккаунт к Telegram</button>
-        <p id="link-code-display" class="hidden"></p>
-      </div>
-    </div>
-  </div>
-
-  <!-- Вкладка: Казино -->
-  <div id="casino-tab" class="tab-content hidden">
-    <div class="tab-header">
-      <button class="back-btn" onclick="openTab('main-menu')">← Меню</button>
-      <h3>Казино "Больше / Меньше"</h3>
-    </div>
-    <div class="casino-card">
-      <p>Ваш баланс: <strong class="user-balance-val">0</strong> Травы</p>
-      <input type="number" id="casino-bet" placeholder="Ставка Травы" min="1">
-      <div class="casino-buttons">
-        <button onclick="playCasino('less')">Меньше 50</button>
-        <button onclick="playCasino('more')">Больше 50</button>
-      </div>
-      <div id="casino-result"></div>
-    </div>
-  </div>
-
-  <!-- Вкладка: Магазин -->
-  <div id="shop-tab" class="tab-content hidden">
-    <div class="tab-header">
-      <button class="back-btn" onclick="openTab('main-menu')">← Меню</button>
-      <h3>Магазин</h3>
-    </div>
-    <div class="shop-grid">
-      <div class="shop-item">
-        <h4>Галочка ✔️</h4>
-        <p>3000 Травы</p>
-        <button onclick="buyItem('verified', 3000)">Купить</button>
-      </div>
-      <div class="shop-item">
-        <h4>Радужный Ник 🌈</h4>
-        <p>3000 Травы</p>
-        <button onclick="buyItem('rainbow', 3000)">Купить</button>
-      </div>
-      <div class="shop-item">
-        <h4>Черный Светящийся Ник ✨</h4>
-        <p>100 Травы</p>
-        <button onclick="buyItem('black_glow', 100)">Купить</button>
-      </div>
-      <div class="shop-item">
-        <h4>Белый Светящийся Ник ❄️</h4>
-        <p>50 Травы</p>
-        <button onclick="buyItem('white_glow', 50)">Купить</button>
-      </div>
+  <!-- Модальное окно просмотра профиля пользователя -->
+  <div id="user-modal" class="modal-overlay hidden" onclick="closeUserModal()">
+    <div class="modal-content vista-box" onclick="event.stopPropagation()">
+      <h3 id="modal-user-name">Пользователь</h3>
+      <p>ID на сайте: <strong id="modal-user-id">--</strong></p>
+      <button class="vista-btn" onclick="closeUserModal()">Закрыть</button>
     </div>
   </div>
 
