@@ -14,34 +14,44 @@ app.use(express.static('public'));
 
 const bot = new TelegramBot(BOT_TOKEN, { polling: true });
 
-// Список свободных столов в офисе (координаты X, Z и поворот)
+// Четыре фиксированных рабочих стола с точной расстановкой (камера смотрит строго на монитор)
 const DESKS = [
-  { id: 0, x: -2, z: -2, rot: 0 },
-  { id: 1, x: 2, z: -2, rot: 0 },
-  { id: 2, x: -2, z: 2, rot: Math.PI },
-  { id: 3, x: 2, z: 2, rot: Math.PI }
+  { id: 0, x: -2.2, z: -2, rotY: 0 },
+  { id: 1, x:  2.2, z: -2, rotY: 0 },
+  { id: 2, x: -2.2, z:  2, rotY: Math.PI },
+  { id: 3, x:  2.2, z:  2, rotY: Math.PI }
 ];
 
 const players = {};
 const names = ["Дима", "Саша", "Алексей", "Егор", "Миша", "Игорь", "Олег", "Влад"];
 const skins = [
-  { skinColor: 0xffdbac, hairColor: 0x221100, hasMustache: false, shirtColor: 0x336699 },
-  { skinColor: 0x8d5524, hairColor: 0x000000, hasMustache: true, shirtColor: 0x993333 },
-  { skinColor: 0xffdbac, hairColor: 0xaa5500, hasMustache: true, shirtColor: 0x339933 },
-  { skinColor: 0xe0ac69, hairColor: 0x111111, hasMustache: false, shirtColor: 0x666666 }
+  { skinColor: 0xffdbac, hairColor: 0x221100, hasMustache: false, shirtColor: 0x2b3e50 },
+  { skinColor: 0x8d5524, hairColor: 0x000000, hasMustache: true,  shirtColor: 0x8e44ad },
+  { skinColor: 0xffdbac, hairColor: 0xd35400, hasMustache: true,  shirtColor: 0x27ae60 },
+  { skinColor: 0xe0ac69, hairColor: 0x111111, hasMustache: false, shirtColor: 0xc0392b }
 ];
 
-// Трансляция из ТГ
+// Чат-история в памяти
+const chatHistory = [
+  { user: 'TG Bot', text: 'Добро пожаловать в офис!', time: '12:00' }
+];
+
+// Получение сообщений из Telegram
 bot.on('message', (msg) => {
   if (String(msg.chat.id) === CHAT_ID || msg.chat.id == CHAT_ID) {
-    const user = msg.from.first_name || 'Анон';
+    const user = msg.from ? (msg.from.first_name || 'TG Пользователь') : 'TG Пользователь';
     const text = msg.text || '[Медиа]';
-    io.emit('chatMessage', { user, text });
+    const time = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+    const msgObj = { user, text, time };
+    
+    chatHistory.push(msgObj);
+    if (chatHistory.length > 50) chatHistory.shift();
+    
+    io.emit('chatMessage', msgObj);
   }
 });
 
 io.on('connection', (socket) => {
-  // Назначаем стол и внешний вид
   const usedDesks = Object.values(players).map(p => p.deskId);
   const freeDesk = DESKS.find(d => !usedDesks.includes(d.id)) || DESKS[0];
   
@@ -54,12 +64,16 @@ io.on('connection', (socket) => {
     isTyping: false
   };
 
-  // Отправляем текущему игроку его данные и список остальных
-  socket.emit('init', { myId: socket.id, players });
-  // Сообщаем остальным о новом коллеге
+  // Отправка данных при входе
+  socket.emit('init', { 
+    myId: socket.id, 
+    players, 
+    chatHistory 
+  });
+
   socket.broadcast.emit('playerJoined', players[socket.id]);
 
-  // Статус печати
+  // Трансляция статуса печати
   socket.on('typingStatus', (isTyping) => {
     if (players[socket.id]) {
       players[socket.id].isTyping = isTyping;
@@ -67,12 +81,19 @@ io.on('connection', (socket) => {
     }
   });
 
-  // Отправка в ТГ
+  // Отправка сообщения в Telegram и всем игрокам
   socket.on('sendToTG', (data) => {
+    const time = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+    const msgObj = { user: data.name, text: data.text, time };
+    
+    chatHistory.push(msgObj);
+    if (chatHistory.length > 50) chatHistory.shift();
+
+    io.emit('chatMessage', msgObj);
     bot.sendMessage(CHAT_ID, `${data.name}: ${data.text}`);
   });
 
-  // Селфи
+  // Отправка селфи
   socket.on('sendSelfie', (data) => {
     const base64Data = data.image.replace(/^data:image\/png;base64,/, "");
     const buffer = Buffer.from(base64Data, 'base64');
@@ -86,4 +107,4 @@ io.on('connection', (socket) => {
 });
 
 const PORT = process.env.PORT || 3000;
-server.listen(PORT, () => console.log(`Офис запущен на порту ${PORT}`));
+server.listen(PORT, () => console.log(`Идеальный 3D Офис запущен на порту ${PORT}`));
