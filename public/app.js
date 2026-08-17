@@ -1,34 +1,41 @@
 const socket = io();
 
+const isMobile = /Android|iPhone|iPad|iPod/i.test(navigator.userAgent);
+if (isMobile) {
+    document.getElementById('joystickZone').style.display = 'block';
+}
+
 let myNickname = "Зритель";
 if (window.Telegram && window.Telegram.WebApp) {
     window.Telegram.WebApp.ready();
     const user = window.Telegram.WebApp.initDataUnsafe?.user;
-    if (user) {
-        myNickname = user.username ? `@${user.username}` : `${user.first_name || ''} ${user.last_name || ''}`.trim();
-    }
+    if (user) myNickname = user.username ? `@${user.username}` : user.first_name;
 }
 
-// Three.js
-const canvas = document.getElementById('canvas3d');
+// 1. WebGL & CSS3D Сцены
 const scene = new THREE.Scene();
 scene.background = new THREE.Color(0x020204);
 
+const cssScene = new THREE.Scene();
+
 const camera = new THREE.PerspectiveCamera(65, window.innerWidth / window.innerHeight, 0.1, 50);
-const renderer = new THREE.WebGLRenderer({ canvas, antialias: true });
+
+const renderer = new THREE.WebGLRenderer({ antialias: true });
 renderer.setSize(window.innerWidth, window.innerHeight);
+document.getElementById('webgl').appendChild(renderer.domElement);
+
+const cssRenderer = new THREE.CSS3DRenderer();
+cssRenderer.setSize(window.innerWidth, window.innerHeight);
+document.getElementById('css3d').appendChild(cssRenderer.domElement);
 
 // Освещение
-const ambient = new THREE.AmbientLight(0xffffff, 0.4);
-scene.add(ambient);
+scene.add(new THREE.AmbientLight(0xffffff, 0.5));
 
-const screenLight = new THREE.PointLight(0xffffff, 1.2, 12);
-screenLight.position.set(0, 3, -4);
-scene.add(screenLight);
-
-// --- УМЕНЬШЕННЫЙ ЗАЛ ---
-const floorMat = new THREE.MeshStandardMaterial({ color: 0x22080a, roughness: 0.8 });
-const floor = new THREE.Mesh(new THREE.PlaneGeometry(12, 16), floorMat);
+// 2. 3D Театр
+const floor = new THREE.Mesh(
+    new THREE.PlaneGeometry(12, 16),
+    new THREE.MeshStandardMaterial({ color: 0x22080a })
+);
 floor.rotation.x = -Math.PI / 2;
 scene.add(floor);
 
@@ -36,16 +43,6 @@ const wallMat = new THREE.MeshStandardMaterial({ color: 0x100b08 });
 const backWall = new THREE.Mesh(new THREE.PlaneGeometry(12, 6), wallMat);
 backWall.position.set(0, 3, -8);
 scene.add(backWall);
-
-const leftWall = new THREE.Mesh(new THREE.PlaneGeometry(16, 6), wallMat);
-leftWall.position.set(-6, 3, 0);
-leftWall.rotation.y = Math.PI / 2;
-scene.add(leftWall);
-
-const rightWall = leftWall.clone();
-rightWall.position.x = 6;
-rightWall.rotation.y = -Math.PI / 2;
-scene.add(rightWall);
 
 // Кресла
 const chairMat = new THREE.MeshStandardMaterial({ color: 0x4a0000 });
@@ -63,67 +60,53 @@ for (let row = 0; row < 3; row++) {
     }
 }
 
-// --- ВИДЕО ЭКРАН И ТЕКСТУРА ---
-const videoElement = document.getElementById('htmlVideo');
-const iframeElement = document.getElementById('iframeVideo');
+// 3. НАСТОЯЩИЙ CSS3D ВИДЕО ЭКРАН (Прямо в 3D мире!)
+const iframe = document.createElement('iframe');
+iframe.style.width = '800px';
+iframe.style.height = '450px';
+iframe.style.border = '0px';
+iframe.allow = 'autoplay';
 
-const videoCanvas = document.createElement('canvas');
-videoCanvas.width = 640; videoCanvas.height = 360;
-const vCtx = videoCanvas.getContext('2d');
+const cssObject = new THREE.CSS3DObject(iframe);
+cssObject.position.set(0, 3, -7.89);
+cssObject.scale.set(8 / 800, 4.5 / 450, 1);
+cssScene.add(cssObject);
 
-const screenTexture = new THREE.CanvasTexture(videoCanvas);
-const screenMesh = new THREE.Mesh(
-    new THREE.PlaneGeometry(8, 4.5),
-    new THREE.MeshBasicMaterial({ map: screenTexture })
-);
-screenMesh.position.set(0, 3, -7.9);
-scene.add(screenMesh);
-
-let currentVideoType = 'none';
-
-function applyVideoState(state) {
-    currentVideoType = state.type;
-
-    if (state.type === 'direct') {
-        iframeElement.style.display = 'none';
-        videoElement.src = state.url;
-        videoElement.currentTime = state.currentTime || 0;
-        videoElement.play().catch(() => {});
-    } else {
-        // Хостинги YouTube / VK / RuTube
-        let embedUrl = state.url;
-        if (state.type === 'youtube') {
-            const match = state.url.match(/(?:youtu\.be\/|youtube\.com\/(?:embed\/|v\/|watch\?v=|watch\?.+&v=))([\w-]{11})/);
-            const id = match ? match[1] : '';
-            embedUrl = `https://www.youtube.com/embed/${id}?autoplay=1&start=${Math.floor(state.currentTime || 0)}&enablejsapi=1`;
-        }
-        iframeElement.src = embedUrl;
+function updateVideoFrame(url, time) {
+    let embedUrl = url;
+    if (url.includes('youtube.com') || url.includes('youtu.be')) {
+        const id = url.split('v=')[1] || url.split('/').pop();
+        embedUrl = `https://www.youtube.com/embed/${id}?autoplay=1&start=${Math.floor(time)}`;
+    } else if (url.includes('rutube.ru')) {
+        const id = url.split('/').pop();
+        embedUrl = `https://rutube.ru/play/embed/${id}`;
     }
+    iframe.src = embedUrl;
 }
 
-// Игроки
-let myId = null;
-let remotePlayers = {};
-let localPos = { x: 0, y: 0.8, z: 3 };
-let yaw = 0, pitch = 0;
-const keys = {};
+// 4. Текстура Лица Персонажа
+function createFaceTexture() {
+    const canvas = document.createElement('canvas');
+    canvas.width = 128; canvas.height = 128;
+    const ctx = canvas.getContext('2d');
 
-canvas.addEventListener('click', () => {
-    if (document.pointerLockElement !== canvas) {
-        canvas.requestPointerLock();
-    }
-});
+    ctx.fillStyle = '#ffdbac';
+    ctx.fillRect(0, 0, 128, 128);
 
-document.addEventListener('mousemove', (e) => {
-    if (document.pointerLockElement === canvas) {
-        yaw -= e.movementX * 0.002;
-        pitch -= e.movementY * 0.002;
-        pitch = Math.max(-Math.PI / 3, Math.min(Math.PI / 3, pitch));
-        camera.rotation.set(pitch, yaw, 0, 'YXZ');
-    }
-});
+    // Глаза
+    ctx.fillStyle = '#000';
+    ctx.beginPath(); ctx.arc(35, 45, 10, 0, Math.PI * 2); ctx.fill();
+    ctx.beginPath(); ctx.arc(93, 45, 10, 0, Math.PI * 2); ctx.fill();
 
-// Уменьшенные модели персонажей
+    // Улыбка
+    ctx.lineWidth = 6;
+    ctx.beginPath(); ctx.arc(64, 70, 30, 0.2, Math.PI - 0.2); ctx.stroke();
+
+    return new THREE.CanvasTexture(canvas);
+}
+
+const faceTexture = createFaceTexture();
+
 function createHumanModel(nickname) {
     const group = new THREE.Group();
 
@@ -134,15 +117,18 @@ function createHumanModel(nickname) {
     body.position.y = 0.35;
     group.add(body);
 
-    const headGroup = new THREE.Group();
-    headGroup.position.y = 0.85;
-
-    const head = new THREE.Mesh(
-        new THREE.SphereGeometry(0.15, 12, 12),
+    const headMat = [
+        new THREE.MeshStandardMaterial({ color: 0xffdbac }),
+        new THREE.MeshStandardMaterial({ color: 0xffdbac }),
+        new THREE.MeshStandardMaterial({ color: 0xffdbac }),
+        new THREE.MeshStandardMaterial({ color: 0xffdbac }),
+        new THREE.MeshStandardMaterial({ map: faceTexture }), // Лицо спереди
         new THREE.MeshStandardMaterial({ color: 0xffdbac })
-    );
-    headGroup.add(head);
-    group.add(headGroup);
+    ];
+
+    const head = new THREE.Mesh(new THREE.BoxGeometry(0.3, 0.3, 0.3), headMat);
+    head.position.y = 0.85;
+    group.add(head);
 
     const labelCanvas = document.createElement('canvas');
     labelCanvas.width = 256; labelCanvas.height = 128;
@@ -152,7 +138,7 @@ function createHumanModel(nickname) {
     sprite.scale.set(1.8, 0.9, 1);
     group.add(sprite);
 
-    group.userData = { nickname, canvas: labelCanvas, texture: labelTexture, msgTimer: null };
+    group.userData = { nickname, canvas: labelCanvas, texture: labelTexture };
     updatePlayerLabel(group, "");
 
     return group;
@@ -165,51 +151,86 @@ function updatePlayerLabel(group, message) {
 
     if (message) {
         ctx.fillStyle = "rgba(255, 255, 255, 0.95)";
-        ctx.beginPath();
-        ctx.roundRect(20, 10, 216, 50, 10);
-        ctx.fill();
-
-        ctx.font = "Bold 14px Arial";
-        ctx.fillStyle = "#000000";
-        ctx.textAlign = "center";
+        ctx.beginPath(); ctx.roundRect(20, 10, 216, 50, 10); ctx.fill();
+        ctx.font = "Bold 14px Arial"; ctx.fillStyle = "#000000"; ctx.textAlign = "center";
         ctx.fillText(message, 128, 40);
     }
 
-    ctx.font = "Bold 16px Arial";
-    ctx.fillStyle = "#ffffff";
-    ctx.shadowColor = "#000000";
-    ctx.shadowBlur = 4;
-    ctx.textAlign = "center";
+    ctx.font = "Bold 16px Arial"; ctx.fillStyle = "#ffffff"; ctx.textAlign = "center";
     ctx.fillText(nickname, 128, 90);
-
     texture.needsUpdate = true;
 }
 
-// Чат и события
+// 5. Управление (ПК и Сенсорное)
+let myId = null;
+let remotePlayers = {};
+let localPos = { x: 0, y: 0.8, z: 3 };
+let yaw = 0, pitch = 0;
+const keys = {};
+
+const webglEl = document.getElementById('webgl');
+webglEl.addEventListener('click', () => {
+    if (!isMobile && document.pointerLockElement !== webglEl) webglEl.requestPointerLock();
+});
+
+document.addEventListener('mousemove', (e) => {
+    if (document.pointerLockElement === webglEl) {
+        yaw -= e.movementX * 0.002;
+        pitch -= e.movementY * 0.002;
+        pitch = Math.max(-Math.PI / 3, Math.min(Math.PI / 3, pitch));
+        camera.rotation.set(pitch, yaw, 0, 'YXZ');
+    }
+});
+
+// Сенсорный осмотр экраном на телефоне
+let touchStartX = 0, touchStartY = 0;
+document.addEventListener('touchstart', (e) => {
+    if (e.touches.length === 1 && e.touches[0].clientX > window.innerWidth / 2) {
+        touchStartX = e.touches[0].clientX;
+        touchStartY = e.touches[0].clientY;
+    }
+});
+document.addEventListener('touchmove', (e) => {
+    if (e.touches.length === 1 && e.touches[0].clientX > window.innerWidth / 2) {
+        const dx = e.touches[0].clientX - touchStartX;
+        const dy = e.touches[0].clientY - touchStartY;
+        yaw -= dx * 0.005;
+        pitch -= dy * 0.005;
+        pitch = Math.max(-Math.PI / 3, Math.min(Math.PI / 3, pitch));
+        camera.rotation.set(pitch, yaw, 0, 'YXZ');
+        touchStartX = e.touches[0].clientX;
+        touchStartY = e.touches[0].clientY;
+    }
+});
+
+// Чат и кнопка видео
 const chatInput = document.getElementById('chatInput');
 const chatHistory = document.getElementById('chatHistory');
+const modal = document.getElementById('videoModal');
+
+document.getElementById('btnChat').onclick = () => {
+    chatInput.style.display = chatInput.style.display === 'block' ? 'none' : 'block';
+    if (chatInput.style.display === 'block') chatInput.focus();
+};
+document.getElementById('btnVideo').onclick = () => {
+    modal.style.display = modal.style.display === 'block' ? 'none' : 'block';
+};
 
 document.addEventListener('keydown', (e) => {
     if ((e.code === 'KeyT' || e.key === 'е') && document.activeElement !== chatInput) {
-        document.exitPointerLock();
-        const modal = document.getElementById('videoModal');
         modal.style.display = modal.style.display === 'block' ? 'none' : 'block';
     }
-
     if (e.code === 'Enter') {
         if (document.activeElement === chatInput) {
             const text = chatInput.value.trim();
             if (text) socket.emit('chatMessage', text);
             chatInput.value = '';
             chatInput.style.display = 'none';
-            canvas.requestPointerLock();
         } else {
-            document.exitPointerLock();
             chatInput.style.display = 'block';
             chatInput.focus();
         }
     }
-
     keys[e.code] = true;
 });
 document.addEventListener('keyup', (e) => keys[e.code] = false);
@@ -218,11 +239,11 @@ function submitVideoUrl() {
     const url = document.getElementById('videoUrlInput').value.trim();
     if (url) {
         socket.emit('changeVideo', url);
-        document.getElementById('videoModal').style.display = 'none';
-        canvas.requestPointerLock();
+        modal.style.display = 'none';
     }
 }
 
+// 6. Сетевая синхронизация
 socket.emit('join', { nickname: myNickname });
 
 socket.on('init', (data) => {
@@ -230,7 +251,7 @@ socket.on('init', (data) => {
     for (let id in data.players) {
         if (id !== myId) addRemotePlayer(data.players[id]);
     }
-    applyVideoState(data.videoState);
+    updateVideoFrame(data.videoState.url, data.videoState.currentTime);
 });
 
 socket.on('playerJoined', (p) => addRemotePlayer(p));
@@ -240,13 +261,11 @@ socket.on('playerLeft', (id) => {
         delete remotePlayers[id];
     }
 });
-
 socket.on('playerMoved', (p) => {
     if (remotePlayers[p.id]) {
         remotePlayers[p.id].target = { x: p.x, y: p.y, z: p.z, ry: p.rotY };
     }
 });
-
 socket.on('chatMessage', (data) => {
     const msgEl = document.createElement('div');
     msgEl.className = 'chat-msg';
@@ -257,13 +276,11 @@ socket.on('chatMessage', (data) => {
     let model = (data.id === myId) ? null : remotePlayers[data.id]?.mesh;
     if (model) {
         updatePlayerLabel(model, data.text);
-        if (model.userData.msgTimer) clearTimeout(model.userData.msgTimer);
-        model.userData.msgTimer = setTimeout(() => updatePlayerLabel(model, ""), 4000);
+        setTimeout(() => updatePlayerLabel(model, ""), 4000);
     }
 });
-
 socket.on('videoStateUpdate', (state) => {
-    applyVideoState(state);
+    updateVideoFrame(state.url, state.currentTime);
 });
 
 function addRemotePlayer(p) {
@@ -273,33 +290,32 @@ function addRemotePlayer(p) {
     remotePlayers[p.id] = { mesh, target: { x: p.x, y: p.y - 0.5, z: p.z, ry: p.rotY } };
 }
 
+// 7. Игровой цикл
 const clock = new THREE.Clock();
 
 function animate() {
     requestAnimationFrame(animate);
     const delta = clock.getDelta();
 
-    if (document.pointerLockElement === canvas) {
-        const speed = 2.5 * delta;
-        const forward = new THREE.Vector3(0, 0, -1).applyQuaternion(camera.quaternion);
-        forward.y = 0; forward.normalize();
-        const side = new THREE.Vector3(1, 0, 0).applyQuaternion(camera.quaternion);
-        side.y = 0; side.normalize();
+    const speed = 2.5 * delta;
+    const forward = new THREE.Vector3(0, 0, -1).applyQuaternion(camera.quaternion);
+    forward.y = 0; forward.normalize();
+    const side = new THREE.Vector3(1, 0, 0).applyQuaternion(camera.quaternion);
+    side.y = 0; side.normalize();
 
-        let moved = false;
-        if (keys['KeyW']) { localPos.x += forward.x * speed; localPos.z += forward.z * speed; moved = true; }
-        if (keys['KeyS']) { localPos.x -= forward.x * speed; localPos.z -= forward.z * speed; moved = true; }
-        if (keys['KeyA']) { localPos.x -= side.x * speed; localPos.z -= side.z * speed; moved = true; }
-        if (keys['KeyD']) { localPos.x += side.x * speed; localPos.z += side.z * speed; moved = true; }
+    let moved = false;
+    if (keys['KeyW']) { localPos.x += forward.x * speed; localPos.z += forward.z * speed; moved = true; }
+    if (keys['KeyS']) { localPos.x -= forward.x * speed; localPos.z -= forward.z * speed; moved = true; }
+    if (keys['KeyA']) { localPos.x -= side.x * speed; localPos.z -= side.z * speed; moved = true; }
+    if (keys['KeyD']) { localPos.x += side.x * speed; localPos.z += side.z * speed; moved = true; }
 
-        localPos.x = Math.max(-5.5, Math.min(5.5, localPos.x));
-        localPos.z = Math.max(-7.5, Math.min(7.5, localPos.z));
+    localPos.x = Math.max(-5.5, Math.min(5.5, localPos.x));
+    localPos.z = Math.max(-7.5, Math.min(7.5, localPos.z));
 
-        camera.position.set(localPos.x, localPos.y, localPos.z);
+    camera.position.set(localPos.x, localPos.y, localPos.z);
 
-        if (moved) {
-            socket.emit('move', { x: localPos.x, y: localPos.y, z: localPos.z, rotY: yaw });
-        }
+    if (moved) {
+        socket.emit('move', { x: localPos.x, y: localPos.y, z: localPos.z, rotY: yaw });
     }
 
     for (let id in remotePlayers) {
@@ -310,21 +326,8 @@ function animate() {
         p.mesh.rotation.y += (p.target.ry - p.mesh.rotation.y) * 0.1;
     }
 
-    // Рендер кадров видео на 3D холст
-    if (currentVideoType === 'direct' && videoElement.readyState >= videoElement.HAVE_CURRENT_DATA) {
-        vCtx.drawImage(videoElement, 0, 0, 640, 360);
-        screenTexture.needsUpdate = true;
-    } else if (currentVideoType !== 'direct') {
-        vCtx.fillStyle = '#050508';
-        vCtx.fillRect(0, 0, 640, 360);
-        vCtx.fillStyle = '#ff0055';
-        vCtx.font = 'Bold 20px Arial';
-        vCtx.textAlign = 'center';
-        vCtx.fillText('ТРАНСЛЯЦИЯ ВКЛЮЧЕНА НА ЭКРАНЕ', 320, 180);
-        screenTexture.needsUpdate = true;
-    }
-
     renderer.render(scene, camera);
+    cssRenderer.render(cssScene, camera);
 }
 
 animate();
@@ -333,4 +336,5 @@ window.addEventListener('resize', () => {
     camera.aspect = window.innerWidth / window.innerHeight;
     camera.updateProjectionMatrix();
     renderer.setSize(window.innerWidth, window.innerHeight);
+    cssRenderer.setSize(window.innerWidth, window.innerHeight);
 });
