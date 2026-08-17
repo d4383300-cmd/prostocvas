@@ -13,11 +13,10 @@ app.use(express.static(path.join(__dirname, 'public')));
 // --- TELEGRAM BOT ---
 const BOT_TOKEN = '8161722600:AAEef8zTPXRw7-fPgkHdkVX1pQqan7I5snY';
 const CHAT_ID = '-1004486534339';
-const WEB_APP_URL = 'https://huyoutube.onrender.com'; // Ваш URL на Render
+const WEB_APP_URL = 'https://prostocvas.onrender.com/';
 
 const bot = new TelegramBot(BOT_TOKEN, { polling: true });
 
-// Функция рассылки
 function sendTelegramNotification() {
     bot.sendMessage(CHAT_ID, "🔥 БЫСТРЕЕ ЗАХОДИМ МЫ СМОТРИМ ВИДЕО! В ТЕАТРЕ ВМЕСТЕ!", {
         reply_markup: {
@@ -28,7 +27,6 @@ function sendTelegramNotification() {
     }).catch(err => console.error("Ошибка Telegram:", err.message));
 }
 
-// Отправка сразу при запуске и каждые 2 минуты
 sendTelegramNotification();
 setInterval(sendTelegramNotification, 120000);
 
@@ -36,7 +34,9 @@ setInterval(sendTelegramNotification, 120000);
 let players = {};
 let videoState = {
     url: 'https://www.youtube.com/watch?v=dQw4w9WgXcQ',
-    type: 'youtube'
+    type: 'youtube',
+    startTime: Date.now(),
+    paused: false
 };
 
 io.on('connection', (socket) => {
@@ -44,14 +44,22 @@ io.on('connection', (socket) => {
         players[socket.id] = {
             id: socket.id,
             nickname: data.nickname || `Зритель #${Math.floor(1000 + Math.random() * 9000)}`,
-            x: (Math.random() - 0.5) * 4,
-            y: 0.8,
-            z: 3 + Math.random() * 2,
+            x: (Math.random() - 0.5) * 2,
+            y: 0.6,
+            z: 2 + Math.random(),
             rotY: 0,
             headPitch: 0
         };
 
-        socket.emit('init', { id: socket.id, players, videoState });
+        // Рассчитываем текущий таймкод для подключающегося игрока
+        const currentOffset = videoState.paused ? 0 : (Date.now() - videoState.startTime) / 1000;
+
+        socket.emit('init', {
+            id: socket.id,
+            players,
+            videoState: { ...videoState, currentTime: currentOffset }
+        });
+
         socket.broadcast.emit('playerJoined', players[socket.id]);
     });
 
@@ -78,8 +86,14 @@ io.on('connection', (socket) => {
         else if (url.includes('vk.com') || url.includes('vkvideo.ru')) type = 'vk';
         else if (url.includes('rutube.ru')) type = 'rutube';
 
-        videoState = { url, type };
-        io.emit('videoStateUpdate', videoState);
+        videoState = {
+            url,
+            type,
+            startTime: Date.now(),
+            paused: false
+        };
+
+        io.emit('videoStateUpdate', { ...videoState, currentTime: 0 });
     });
 
     socket.on('disconnect', () => {
