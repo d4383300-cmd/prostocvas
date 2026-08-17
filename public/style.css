@@ -1,0 +1,206 @@
+* {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+  font-family: 'Inter', sans-serif;
+  user-select: none;
+}
+
+body {
+  background-color: #0b0e14;
+  color: #ffffff;
+  overflow: hidden;
+  height: 100vh;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+}
+
+/* SplashScreen */
+#splash-screen {
+  position: fixed;
+  inset: 0;
+  background-color: #000;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  z-index: 100;
+  transition: opacity 0.8s ease;
+}
+
+#splash-title {
+  font-size: 3rem;
+  letter-spacing: 4px;
+  animation: fadeIn 1s ease forwards, fadeOut 1s ease 1.5s forwards;
+  opacity: 0;
+}
+
+@keyframes fadeIn { to { opacity: 1; } }
+@keyframes fadeOut { to { opacity: 0; } }
+
+/* Utility */
+.hidden { display: none !important; }
+
+/* Main Menu */
+#main-menu {
+  width: 100%;
+  max-width: 400px;
+  padding: 20px;
+  animation: scaleUp 0.5s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.menu-card {
+  background: #161b22;
+  border-radius: 16px;
+  padding: 30px;
+  text-align: center;
+  border: 1px solid #30363d;
+  box-shadow: 0 10px 30px rgba(0,0,0,0.5);
+}
+
+.menu-card h2 {
+  margin-bottom: 25px;
+  letter-spacing: 2px;
+  color: #58a6ff;
+}
+
+.button-grid {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+button {
+  background: #21262d;
+  color: #c9d1d9;
+  border: 1px solid #30363d;
+  padding: 14px;
+  border-radius: 10px;
+  font-size: 1rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+button:hover {
+  background: #30363d;
+  color: #fff;
+  transform: translateY(-2px);
+}
+
+/* Tabs */
+.tab-content {
+  width: 100%;
+  max-width: 600px;
+  height: 90vh;
+  background: #161b22;
+  border-radius: 16px;
+  display: flex;
+  flex-direction: column;
+  border: 1px solid #30363d;
+}
+
+.chat-header, .tab-header {
+  padding: 15px;
+  background: #0d1117;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  border-bottom: 1px solid #30363d;
+  border-radius: 16px 16px 0 0;
+}
+
+/* Chat */
+#chat-messages {
+  flex: 1;
+  padding: 15px;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.msg {
+  background: #21262d;
+  padding: 10px 14px;
+  border-radius: 10px;
+  max-width: 85%;
+  word-wrap: break-word;
+}
+
+.tg-nickname {
+  color: #58a6ff;
+  font-weight: bold;
+}
+
+.site-nickname {
+  font-weight: bold;
+}
+
+/* Color styles */
+.nick-rainbow {
+  background: linear-gradient(90deg, red, orange, yellow, green, blue, indigo, violet);
+  -webkit-background-clip: text;
+  color: transparent;
+}
+.nick-black_glow {
+  color: #000;
+  text-shadow: 0 0 8px rgba(255, 255, 255, 0.8);
+}
+.nick-white_glow {
+  color: #fff;
+  text-shadow: 0 0 8px rgba(255, 255, 255, 0.9);
+}
+
+.chat-input-area {
+  padding: 15px;
+  display: flex;
+  gap: 10px;
+  border-top: 1px solid #30363d;
+}
+
+.chat-input-area input {
+  flex: 1;
+  background: #0d1117;
+  border: 1px solid #30363d;
+  padding: 12px;
+  border-radius: 8px;
+  color: #fff;
+}
+
+/* WebRTC Call Panel */
+#call-overlay {
+  background: #1f242c;
+  padding: 10px 15px;
+  border-bottom: 1px solid #30363d;
+}
+
+.call-status {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+/* Casino & Profile & Shop */
+.profile-card, .casino-card, .shop-grid {
+  padding: 20px;
+}
+
+.shop-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 15px;
+}
+
+.shop-item {
+  background: #21262d;
+  padding: 15px;
+  border-radius: 10px;
+  text-align: center;
+  border: 1px solid #30363d;
+}
+
+@keyframes scaleUp {
+  from { transform: scale(0.9); opacity: 0; }
+  to { transform: scale(1); opacity: 1; }
+}

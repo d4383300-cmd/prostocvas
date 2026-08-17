@@ -1,0 +1,121 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Прослушка</title>
+  <link rel="stylesheet" href="style.css">
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;800&display=swap" rel="stylesheet">
+</head>
+<body>
+
+  <!-- Экран анимации запуска -->
+  <div id="splash-screen">
+    <h1 id="splash-title">Прослушка</h1>
+  </div>
+
+  <!-- Главное меню -->
+  <div id="main-menu" class="hidden">
+    <div class="menu-card">
+      <h2>ПРОСЛУШКА</h2>
+      <div class="button-grid">
+        <button onclick="openTab('chat-tab')">💬 Общий чат</button>
+        <button onclick="openTab('profile-tab')">👤 Профиль</button>
+        <button onclick="openTab('casino-tab')">🎰 Казино</button>
+        <button onclick="openTab('shop-tab')">🛒 Магазин</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Вкладка: Общий чат -->
+  <div id="chat-tab" class="tab-content hidden">
+    <div class="chat-header">
+      <button class="back-btn" onclick="openTab('main-menu')">← Меню</button>
+      <h3>Общий Чат</h3>
+      <button id="call-btn" onclick="toggleCall()">📞 Общий звонок</button>
+    </div>
+
+    <!-- Область вызова WebRTC -->
+    <div id="call-overlay" class="hidden">
+      <div class="call-status">
+        <span>Статус: <strong id="call-state">В звонке</strong></span>
+        <button id="mic-btn" onclick="toggleMic()">🎤 Микрофон: ВКЛ</button>
+      </div>
+      <div id="audio-container"></div>
+    </div>
+
+    <div id="chat-messages"></div>
+
+    <div class="chat-input-area">
+      <input type="text" id="chat-input" maxlength="300" placeholder="Напишите сообщение..." onkeydown="if(event.key==='Enter') sendMessage()">
+      <button onclick="sendMessage()">Отправить</button>
+    </div>
+  </div>
+
+  <!-- Вкладка: Профиль -->
+  <div id="profile-tab" class="tab-content hidden">
+    <div class="tab-header">
+      <button class="back-btn" onclick="openTab('main-menu')">← Меню</button>
+      <h3>Профиль</h3>
+    </div>
+    <div class="profile-card">
+      <p>Ваш Ник: <strong id="profile-nickname">Гость</strong></p>
+      <p>Баланс: <span id="profile-balance">0</span> 🌾 Травы</p>
+      <hr>
+      <div id="link-section">
+        <button onclick="generateLinkCode()">🔗 Привязать аккаунт к Telegram</button>
+        <p id="link-code-display" class="hidden"></p>
+      </div>
+    </div>
+  </div>
+
+  <!-- Вкладка: Казино -->
+  <div id="casino-tab" class="tab-content hidden">
+    <div class="tab-header">
+      <button class="back-btn" onclick="openTab('main-menu')">← Меню</button>
+      <h3>Казино "Больше / Меньше"</h3>
+    </div>
+    <div class="casino-card">
+      <p>Ваш баланс: <strong class="user-balance-val">0</strong> Травы</p>
+      <input type="number" id="casino-bet" placeholder="Ставка Травы" min="1">
+      <div class="casino-buttons">
+        <button onclick="playCasino('less')">Меньше 50</button>
+        <button onclick="playCasino('more')">Больше 50</button>
+      </div>
+      <div id="casino-result"></div>
+    </div>
+  </div>
+
+  <!-- Вкладка: Магазин -->
+  <div id="shop-tab" class="tab-content hidden">
+    <div class="tab-header">
+      <button class="back-btn" onclick="openTab('main-menu')">← Меню</button>
+      <h3>Магазин</h3>
+    </div>
+    <div class="shop-grid">
+      <div class="shop-item">
+        <h4>Галочка ✔️</h4>
+        <p>3000 Травы</p>
+        <button onclick="buyItem('verified', 3000)">Купить</button>
+      </div>
+      <div class="shop-item">
+        <h4>Радужный Ник 🌈</h4>
+        <p>3000 Травы</p>
+        <button onclick="buyItem('rainbow', 3000)">Купить</button>
+      </div>
+      <div class="shop-item">
+        <h4>Черный Светящийся Ник ✨</h4>
+        <p>100 Травы</p>
+        <button onclick="buyItem('black_glow', 100)">Купить</button>
+      </div>
+      <div class="shop-item">
+        <h4>Белый Светящийся Ник ❄️</h4>
+        <p>50 Травы</p>
+        <button onclick="buyItem('white_glow', 50)">Купить</button>
+      </div>
+    </div>
+  </div>
+
+  <script src="app.js"></script>
+</body>
+</html>
