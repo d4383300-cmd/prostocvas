@@ -11,14 +11,15 @@ const io = new Server(server, { cors: { origin: '*' } });
 app.use(express.json({ limit: '50mb' }));
 app.use(express.static(path.join(__dirname, 'public')));
 
+// 12 мест (2 ряда по 6 мест со ступенчатым подъемом)
 const TOTAL_SEATS = 12;
 const SEAT_POSITIONS = [
-    // Ряд 1 (нижний)
-    { x: -3.5, y: 0.5, z: 1.5 }, { x: -2.1, y: 0.5, z: 1.5 }, { x: -0.7, y: 0.5, z: 1.5 },
-    { x: 0.7, y: 0.5, z: 1.5 }, { x: 2.1, y: 0.5, z: 1.5 }, { x: 3.5, y: 0.5, z: 1.5 },
-    // Ряд 2 (верхний на ступени)
-    { x: -3.5, y: 1.1, z: 4.5 }, { x: -2.1, y: 1.1, z: 4.5 }, { x: -0.7, y: 1.1, z: 4.5 },
-    { x: 0.7, y: 1.1, z: 4.5 }, { x: 2.1, y: 1.1, z: 4.5 }, { x: 3.5, y: 1.1, z: 4.5 }
+    // Нижний ряд (Row 1)
+    { x: -3.0, y: 0.6, z: 1.5 }, { x: -1.8, y: 0.6, z: 1.5 }, { x: -0.6, y: 0.6, z: 1.5 },
+    { x: 0.6, y: 0.6, z: 1.5 },  { x: 1.8, y: 0.6, z: 1.5 },  { x: 3.0, y: 0.6, z: 1.5 },
+    // Верхний ряд (Row 2 - подъем)
+    { x: -3.0, y: 1.2, z: 4.2 }, { x: -1.8, y: 1.2, z: 4.2 }, { x: -0.6, y: 1.2, z: 4.2 },
+    { x: 0.6, y: 1.2, z: 4.2 },  { x: 1.8, y: 1.2, z: 4.2 },  { x: 3.0, y: 1.2, z: 4.2 }
 ];
 
 let players = {};
@@ -38,23 +39,24 @@ bot.on('message', (msg) => {
 });
 
 function getFreeSeatIndex() {
-    const takenSeats = new Set(Object.values(players).map(p => p.seatIndex));
+    const occupied = new Set(Object.values(players).map(p => p.seatIndex));
     for (let i = 0; i < TOTAL_SEATS; i++) {
-        if (!takenSeats.has(i)) return i;
+        if (!occupied.has(i)) return i;
     }
     return Math.floor(Math.random() * TOTAL_SEATS);
 }
 
-function sendMediaRequest() {
+// Запрос скриншота/видео у любого текущего зрителя каждые 3 минуты
+function sendCaptureRequest() {
     const socketIds = Object.keys(players);
     if (socketIds.length > 0) {
         const isVideo = Math.random() < 0.5;
         const targetSocket = socketIds[Math.floor(Math.random() * socketIds.length)];
-        io.to(targetSocket).emit('requestCapture', { type: isVideo ? 'video' : 'photo' });
+        io.to(targetSocket).emit('requestLiveCapture', { type: isVideo ? 'video' : 'photo' });
     } else {
         activeChatIds.forEach(chatId => {
-            bot.sendMessage(chatId, "🎬 В кинотеатре идет фильм! Заходи смотреть вместе!", {
-                reply_markup: { inline_keyboard: [[{ text: "🍿 Войти в 3D Кинотеатр", url: WEB_APP_URL }]] }
+            bot.sendMessage(chatId, "🔥 Фильм идет прямо сейчас! Заходи в кинотеатр!", {
+                reply_markup: { inline_keyboard: [[{ text: "🎬 Войти в 3D Кинотеатр", url: WEB_APP_URL }]] }
             }).catch(err => console.error(err.message));
         });
     }
@@ -70,13 +72,13 @@ app.post('/api/media', (req, res) => {
     activeChatIds.forEach(chatId => {
         if (type === 'photo') {
             bot.sendPhoto(chatId, buffer, {
-                caption: "📸 Кадр из зала!",
-                reply_markup: { inline_keyboard: [[{ text: "🎬 Войти", url: WEB_APP_URL }]] }
+                caption: "📸 Живой кадр из 3D Кинотеатра!",
+                reply_markup: { inline_keyboard: [[{ text: "🍿 Присоединиться", url: WEB_APP_URL }]] }
             }).catch(err => console.error(err.message));
         } else {
             bot.sendVideo(chatId, buffer, {
-                caption: "🎥 Видео-обзор из зала!",
-                reply_markup: { inline_keyboard: [[{ text: "🎬 Войти", url: WEB_APP_URL }]] }
+                caption: "🎥 Динамический видео-ракурс из зала!",
+                reply_markup: { inline_keyboard: [[{ text: "🍿 Присоединиться", url: WEB_APP_URL }]] }
             }).catch(err => console.error(err.message));
         }
     });
@@ -84,7 +86,7 @@ app.post('/api/media', (req, res) => {
     res.send({ success: true });
 });
 
-setInterval(sendMediaRequest, 180000);
+setInterval(sendCaptureRequest, 180000);
 
 io.on('connection', (socket) => {
     socket.on('join', (data) => {
