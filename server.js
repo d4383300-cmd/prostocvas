@@ -31,6 +31,11 @@ sendTelegramNotification();
 setInterval(sendTelegramNotification, 120000);
 
 // --- SOCKET.IO ---
+const MAX_SEATS = 6;
+// Координаты X для 6 кресел в ряд
+const SEAT_POSITIONS_X = [-2.5, -1.5, -0.5, 0.5, 1.5, 2.5];
+let takenSeats = new Array(MAX_SEATS).fill(null); // Хранит socket.id
+
 let players = {};
 let videoState = {
     url: 'https://www.youtube.com/watch?v=dQw4w9WgXcQ',
@@ -39,12 +44,23 @@ let videoState = {
 
 io.on('connection', (socket) => {
     socket.on('join', (data) => {
+        // Поиск свободного кресла
+        let seatIndex = takenSeats.findIndex(id => id === null);
+
+        if (seatIndex === -1) {
+            socket.emit('fullRoom', 'К сожалению, в зале нет свободных мест (максимум 6 зрителей)!');
+            return;
+        }
+
+        takenSeats[seatIndex] = socket.id;
+
         players[socket.id] = {
             id: socket.id,
-            nickname: data.nickname || `Зритель #${Math.floor(1000 + Math.random() * 9000)}`,
-            x: (Math.random() - 0.5) * 2,
+            nickname: data.nickname || `Зритель #${seatIndex + 1}`,
+            seatIndex: seatIndex,
+            x: SEAT_POSITIONS_X[seatIndex],
             y: 0.6,
-            z: 2 + Math.random(),
+            z: 2.0,
             rotY: 0
         };
 
@@ -52,6 +68,7 @@ io.on('connection', (socket) => {
 
         socket.emit('init', {
             id: socket.id,
+            seatIndex,
             players,
             videoState: { ...videoState, currentTime }
         });
@@ -59,10 +76,10 @@ io.on('connection', (socket) => {
         socket.broadcast.emit('playerJoined', players[socket.id]);
     });
 
-    socket.on('move', (data) => {
+    socket.on('look', (data) => {
         if (players[socket.id]) {
-            Object.assign(players[socket.id], data);
-            socket.broadcast.emit('playerMoved', players[socket.id]);
+            players[socket.id].rotY = data.rotY;
+            socket.broadcast.emit('playerLooked', { id: socket.id, rotY: data.rotY });
         }
     });
 
@@ -85,6 +102,10 @@ io.on('connection', (socket) => {
     });
 
     socket.on('disconnect', () => {
+        // Освобождаем кресло
+        const idx = takenSeats.indexOf(socket.id);
+        if (idx !== -1) takenSeats[idx] = null;
+
         delete players[socket.id];
         io.emit('playerLeft', socket.id);
     });
