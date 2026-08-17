@@ -24,14 +24,55 @@ let videoState = {
     startTime: Date.now()
 };
 
-let activeChatIds = new Set();
+const TARGET_CHAT_ID = '-1004349256495';
+let activeChatIds = new Set([TARGET_CHAT_ID]);
 
 const BOT_TOKEN = '8909586840:AAGmOGefqetTN-cFZrxQSkgYtn-bDAv_RvU';
 const WEB_APP_URL = 'https://prostocvas.onrender.com/';
 const bot = new TelegramBot(BOT_TOKEN, { polling: true });
 
+// Обработка команд бота
 bot.on('message', (msg) => {
-    if (msg.chat && msg.chat.id) activeChatIds.add(msg.chat.id.toString());
+    if (!msg.chat || !msg.chat.id) return;
+    const chatId = msg.chat.id.toString();
+    activeChatIds.add(chatId);
+
+    // Трансляция сообщений из целевой группы на экран стены
+    if (chatId === TARGET_CHAT_ID && msg.text && !msg.text.startsWith('/')) {
+        const author = msg.from.first_name || msg.from.username || "Аноним";
+        io.emit('telegramWallMessage', { user: author, text: msg.text });
+    }
+});
+
+// Команда /start с меню выбора ракурса
+bot.onText(/\/start/, (msg) => {
+    const chatId = msg.chat.id;
+    bot.sendMessage(chatId, "🍿 **Добро пожаловать в 3D Кинотеатр!**\nВыберите ракурс для фото с веб-камеры зала:", {
+        parse_mode: 'Markdown',
+        reply_markup: {
+            inline_keyboard: [
+                [{ text: "🎬 Общий вид зала", callback_data: "snap_front" }, { text: "🍿 Ряд игроков", callback_data: "snap_players" }],
+                [{ text: "🎥 Вид с балкона", callback_data: "snap_top" }, { text: "👥 Вид сбоку", callback_data: "snap_side" }],
+                [{ text: "🔍 Первый ряд (Крупный план)", callback_data: "snap_close" }],
+                [{ text: "🌐 Открыть 3D Кинотеатр", url: WEB_APP_URL }]
+            ]
+        }
+    });
+});
+
+// Обработка нажатий на кнопки ракурсов
+bot.on('callback_query', (query) => {
+    const chatId = query.message.chat.id;
+    const angle = query.data.replace('snap_', '');
+
+    const socketIds = Object.keys(players);
+    if (socketIds.length > 0) {
+        bot.answerCallbackQuery(query.id, { text: "Делаем снимок..." });
+        const targetSocket = socketIds[Math.floor(Math.random() * socketIds.length)];
+        io.to(targetSocket).emit('requestLiveCapture', { angle, requestedChatId: chatId });
+    } else {
+        bot.answerCallbackQuery(query.id, { text: "В зале сейчас никого нет!", show_alert: true });
+    }
 });
 
 function getFreePlayerSeatIndex() {
@@ -45,44 +86,25 @@ function getFreePlayerSeatIndex() {
     return Math.floor(Math.random() * 6);
 }
 
-function sendMediaRequest() {
-    const socketIds = Object.keys(players);
-    if (socketIds.length > 0) {
-        const targetSocket = socketIds[Math.floor(Math.random() * socketIds.length)];
-        io.to(targetSocket).emit('requestLiveCapture');
-    } else {
-        activeChatIds.forEach(chatId => {
-            bot.sendMessage(chatId, "🎬 В кинотеатре идет сеанс! Заходи скорее в 3D зал!", {
-                reply_markup: { inline_keyboard: [[{ text: "🍿 Войти в зал", url: WEB_APP_URL }]] }
-            }).catch(err => {
-                if (err.response && err.response.statusCode === 403) activeChatIds.delete(chatId);
-            });
-        });
-    }
-}
-
+// Прием скриншотов с клиента
 app.post('/api/media', (req, res) => {
-    const { data } = req.body;
+    const { data, targetChatId, isSelfie, nickname } = req.body;
     if (!data) return res.status(400).send("No data");
 
     const base64Data = data.replace(/^data:image\/png;base64,/, "");
     const buffer = Buffer.from(base64Data, 'base64');
 
-    activeChatIds.forEach(chatId => {
-        bot.sendPhoto(chatId, buffer, {
-            caption: "📸 Прямой кадр с экрана на всех зрителей в зале!",
-            reply_markup: { inline_keyboard: [[{ text: "🎬 Войти в 3D Кинотеатр", url: WEB_APP_URL }]] }
-        }).catch(err => {
-            if (err.response && (err.response.statusCode === 400 || err.response.statusCode === 403)) {
-                activeChatIds.delete(chatId);
-            }
-        });
-    });
+    const destChat = targetChatId || TARGET_CHAT_ID;
+    const caption = isSelfie ? `📸 Селфи от зрителя **${nickname || 'Игрок'}**!` : "📸 Снимок из 3D Кинотеатра!";
+
+    bot.sendPhoto(destChat, buffer, {
+        caption,
+        parse_mode: 'Markdown',
+        reply_markup: { inline_keyboard: [[{ text: "🎬 Войти в 3D Кинотеатр", url: WEB_APP_URL }]] }
+    }).catch(err => console.error("SendPhoto Error:", err.message));
 
     res.send({ success: true });
 });
-
-setInterval(sendMediaRequest, 180000);
 
 io.on('connection', (socket) => {
     socket.on('join', (data) => {
