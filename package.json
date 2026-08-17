@@ -1,7 +1,7 @@
 {
   "name": "proslushka-chat",
-  "version": "2.0.0",
-  "description": "Интерактивный чат Прослушка с Windows Vista стилем и WebRTC",
+  "version": "3.0.0",
+  "description": "Интерактивный чат Прослушка с SQLite и встроенным видеоплеером",
   "main": "server.js",
   "scripts": {
     "start": "node server.js"
@@ -9,6 +9,7 @@
   "dependencies": {
     "express": "^4.19.2",
     "node-telegram-bot-api": "^0.66.0",
+    "sqlite3": "^5.1.7",
     "ws": "^8.17.1"
   }
 }
