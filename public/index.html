@@ -1,0 +1,341 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+    <title>LEGO DOOM Smart Home</title>
+    <style>
+        body { margin: 0; overflow: hidden; font-family: monospace; user-select: none; background: #000; }
+        #canvas-container { width: 100vw; height: 100vh; }
+        
+        /* UI и интерфейс */
+        #ui { position: absolute; top: 10px; left: 10px; color: #0f0; background: rgba(0,0,0,0.8); padding: 10px; border: 2px solid #0f0; }
+        #inventory { position: absolute; bottom: 20px; left: 50%; transform: translateX(-50%); display: flex; gap: 10px; background: rgba(0,0,0,0.8); padding: 10px; border: 2px solid #fff; }
+        .slot { width: 50px; height: 50px; border: 1px solid #aaa; display: flex; align-items: center; justify-content: center; font-size: 24px; cursor: pointer; }
+        
+        /* Модальные окна */
+        .modal { display: none; position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); background: #111; color: #fff; padding: 20px; border: 3px solid #f00; text-align: center; z-index: 100; }
+        
+        /* Мобильное управление */
+        #touch-controls { position: absolute; bottom: 20px; left: 20px; display: none; gap: 5px; flex-direction: column; }
+        .t-btn { width: 50px; height: 50px; background: rgba(255,255,255,0.3); border: none; color: white; font-size: 20px; }
+        @media (max-width: 768px) { #touch-controls { display: flex; } }
+    </style>
+    <!-- Three.js и Socket.io -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <script src="/socket.io/socket.io.js"></script>
+</head>
+<body>
+
+    <div id="canvas-container"></div>
+
+    <div id="ui">
+        🎮 <b>LEGO DOOM HOME</b><br>
+        Управление: WASD / Кнопки на экране<br>
+        Взаимодействие: Подходи к объектам
+    </div>
+
+    <!-- Инвентарь -->
+    <div id="inventory">
+        <div class="slot" id="slot-1" onclick="eatFood()">🍏</div>
+        <div class="slot" id="slot-2">🍕</div>
+    </div>
+
+    <!-- Модалка YouTube (Телевизор) -->
+    <div id="tv-modal" class="modal">
+        <h3>📺 Телевизор в зале</h3>
+        <input type="text" id="yt-url" placeholder="Вставьте ID видео YouTube (напр. dQw4w9WgXcQ)" style="width: 80%;">
+        <br><br>
+        <button onclick="setTvVideo()">Включить всем</button>
+        <button onclick="closeModal('tv-modal')">Закрыть</button>
+    </div>
+
+    <!-- Модалка Казино 777 -->
+    <div id="casino-modal" class="modal">
+        <h3>🎰 Казино 777</h3>
+        <div id="slot-machine" style="font-size: 40px; margin: 20px;">❓ | ❓ | ❓</div>
+        <button onclick="spinSlots()">КРУТИТЬ!</button>
+        <button onclick="closeModal('casino-modal')">Уйти</button>
+    </div>
+
+    <!-- Элемент YouTube плеера (скрытый Canvas рендеринг) -->
+    <div id="yt-player-container" style="position: absolute; top: -9999px;">
+        <div id="player"></div>
+    </div>
+
+    <!-- Сенсорные кнопки -->
+    <div id="touch-controls">
+        <button class="t-btn" ontouchstart="keys.w=true" ontouchend="keys.w=false">▲</button>
+        <div style="display:flex; gap:5px;">
+            <button class="t-btn" ontouchstart="keys.a=true" ontouchend="keys.a=false">◀</button>
+            <button class="t-btn" ontouchstart="keys.s=true" ontouchend="keys.s=false">▼</button>
+            <button class="t-btn" ontouchstart="keys.d=true" ontouchend="keys.d=false">▶</button>
+        </div>
+    </div>
+
+    <script>
+        const socket = io();
+        let scene, camera, renderer;
+        let myPlayerMesh, selfId;
+        const otherPlayers = {};
+        const keys = { w: false, a: false, s: false, d: false };
+
+        // Инициализация Three.js
+        function init() {
+            const container = document.getElementById('canvas-container');
+            scene = new THREE.Scene();
+            scene.background = new THREE.Color(0x111122);
+
+            camera = new THREE.PerspectiveCamera(60, window.innerWidth / window.innerHeight, 0.1, 1000);
+            renderer = new THREE.WebGLRenderer({ antialias: false }); // Pixelated retro feel
+            renderer.setSize(window.innerWidth, window.innerHeight);
+            renderer.setPixelRatio(0.5); // Ретро пиксельная графика DOOM!
+            container.appendChild(renderer.domElement);
+
+            // Освещение
+            const ambientLight = new THREE.AmbientLight(0xffffff, 0.7);
+            scene.add(ambientLight);
+            const pointLight = new THREE.PointLight(0xffaa00, 1, 20);
+            pointLight.position.set(0, 5, 0);
+            scene.add(pointLight);
+
+            buildHouse();
+            animate();
+        }
+
+        // Генерация текстуры в стиле LEGO-пупырышек
+        function createLegoTexture(colorHex) {
+            const canvas = document.createElement('canvas');
+            canvas.width = 64; canvas.height = 64;
+            const ctx = canvas.getContext('2d');
+            ctx.fillStyle = colorHex;
+            ctx.fillRect(0, 0, 64, 64);
+            ctx.fillStyle = 'rgba(0,0,0,0.15)';
+            ctx.beginPath(); ctx.arc(16, 16, 8, 0, Math.PI*2); ctx.fill();
+            ctx.beginPath(); ctx.arc(48, 16, 8, 0, Math.PI*2); ctx.fill();
+            ctx.beginPath(); ctx.arc(16, 48, 8, 0, Math.PI*2); ctx.fill();
+            ctx.beginPath(); ctx.arc(48, 48, 8, 0, Math.PI*2); ctx.fill();
+            return new THREE.CanvasTexture(canvas);
+        }
+
+        // Постройка Дома (Зал, Кухня, 2 Комнаты без дверей)
+        function buildHouse() {
+            const wallMat = new THREE.MeshBasicMaterial({ map: createLegoTexture('#c23b22') });
+            const floorMat = new THREE.MeshBasicMaterial({ map: createLegoTexture('#333333') });
+
+            // Пол
+            const floor = new THREE.Mesh(new THREE.PlaneGeometry(30, 30), floorMat);
+            floor.rotation.x = -Math.PI / 2;
+            scene.add(floor);
+
+            // Функция стен
+            function addWall(x, z, w, d) {
+                const wall = new THREE.Mesh(new THREE.BoxGeometry(w, 4, d), wallMat);
+                wall.position.set(x, 2, z);
+                scene.add(wall);
+            }
+
+            // Внешние стены
+            addWall(0, -15, 30, 1);
+            addWall(0, 15, 30, 1);
+            addWall(-15, 0, 1, 30);
+            addWall(15, 0, 1, 30);
+
+            // Перегородки комнат (БЕЗ ДВЕРЕЙ - открытые проходы)
+            addWall(-5, -5, 1, 10);
+            addWall(5, 5, 1, 10);
+
+            // МЕБЕЛЬ & ИНТЕРАКТИВ
+
+            // 1. ЗАЛ: Телевизор
+            const tvMat = new THREE.MeshBasicMaterial({ color: 0x000000 });
+            const tv = new THREE.Mesh(new THREE.BoxGeometry(4, 2.5, 0.2), tvMat);
+            tv.position.set(0, 3, -14.3);
+            tv.name = "TV";
+            scene.add(tv);
+
+            // 2. КУХНЯ: Холодильник
+            const fridgeMat = new THREE.MeshBasicMaterial({ color: 0xffffff });
+            const fridge = new THREE.Mesh(new THREE.BoxGeometry(2, 4, 2), fridgeMat);
+            fridge.position.set(-12, 2, -12);
+            fridge.name = "FRIDGE";
+            scene.add(fridge);
+
+            // 3. КОМНАТА 1: Казино 777
+            const casinoMat = new THREE.MeshBasicMaterial({ color: 0xffd700 });
+            const casinoSlot = new THREE.Mesh(new THREE.BoxGeometry(2, 3, 2), casinoMat);
+            casinoSlot.position.set(12, 1.5, 12);
+            casinoSlot.name = "CASINO";
+            scene.add(casinoSlot);
+
+            // 4. КОМНАТА 2: Декор (Картины)
+            const picMat = new THREE.MeshBasicMaterial({ color: 0x00ffcc });
+            const picture = new THREE.Mesh(new THREE.PlaneGeometry(3, 2), picMat);
+            picture.position.set(-14.4, 3, 10);
+            picture.rotation.y = Math.PI / 2;
+            scene.add(picture);
+        }
+
+        // Создание LEGO-человечка
+        function createPlayerMesh(skinColor, shirtColor) {
+            const group = new THREE.Group();
+            const skinMat = new THREE.MeshBasicMaterial({ color: skinColor });
+            const shirtMat = new THREE.MeshBasicMaterial({ color: shirtColor });
+
+            // Голова (Lego style)
+            const head = new THREE.Mesh(new THREE.CylinderGeometry(0.4, 0.4, 0.8, 8), skinMat);
+            head.position.y = 1.6;
+            group.add(head);
+
+            // Торс
+            const torso = new THREE.Mesh(new THREE.BoxGeometry(0.8, 1, 0.4), shirtMat);
+            torso.position.y = 0.8;
+            group.add(torso);
+
+            return group;
+        }
+
+        // Сетевая логика
+        socket.on('currentPlayers', (data) => {
+            selfId = data.selfId;
+            Object.keys(data.players).forEach((id) => {
+                const p = data.players[id];
+                const mesh = createPlayerMesh(p.color, p.shirtColor);
+                mesh.position.set(p.x, p.y, p.z);
+                scene.add(mesh);
+
+                if (id === selfId) {
+                    myPlayerMesh = mesh;
+                } else {
+                    otherPlayers[id] = mesh;
+                }
+            });
+        });
+
+        socket.on('newPlayer', (p) => {
+            const mesh = createPlayerMesh(p.color, p.shirtColor);
+            mesh.position.set(p.x, p.y, p.z);
+            scene.add(mesh);
+            otherPlayers[p.id] = mesh;
+        });
+
+        socket.on('playerMoved', (p) => {
+            if (otherPlayers[p.id]) {
+                otherPlayers[p.id].position.set(p.x, p.y, p.z);
+                otherPlayers[p.id].rotation.y = p.rotation;
+            }
+        });
+
+        socket.on('playerDisconnected', (id) => {
+            if (otherPlayers[id]) {
+                scene.remove(otherPlayers[id]);
+                delete otherPlayers[id];
+            }
+        });
+
+        // Управление ПК
+        window.addEventListener('keydown', (e) => {
+            if(e.key.toLowerCase() in keys) keys[e.key.toLowerCase()] = true;
+            checkInteractions();
+        });
+        window.addEventListener('keyup', (e) => {
+            if(e.key.toLowerCase() in keys) keys[e.key.toLowerCase()] = false;
+        });
+
+        // Логика движения и триггеров
+        function updatePlayer() {
+            if (!myPlayerMesh) return;
+
+            const speed = 0.15;
+            let moved = false;
+
+            if (keys.w) { myPlayerMesh.position.z -= speed; myPlayerMesh.rotation.y = Math.PI; moved = true; }
+            if (keys.s) { myPlayerMesh.position.z += speed; myPlayerMesh.rotation.y = 0; moved = true; }
+            if (keys.a) { myPlayerMesh.position.x -= speed; myPlayerMesh.rotation.y = -Math.PI/2; moved = true; }
+            if (keys.d) { myPlayerMesh.position.x += speed; myPlayerMesh.rotation.y = Math.PI/2; moved = true; }
+
+            // Камера следит за игроком сверху-сзади в стиле DOOM
+            camera.position.set(myPlayerMesh.position.x, myPlayerMesh.position.y + 4, myPlayerMesh.position.z + 6);
+            camera.lookAt(myPlayerMesh.position);
+
+            if (moved) {
+                socket.emit('playerMove', {
+                    x: myPlayerMesh.position.x,
+                    y: myPlayerMesh.position.y,
+                    z: myPlayerMesh.position.z,
+                    rotation: myPlayerMesh.rotation.y
+                });
+            }
+        }
+
+        // Проверка близости к мебели
+        function checkInteractions() {
+            if(!myPlayerMesh) return;
+            const pos = myPlayerMesh.position;
+
+            // Телевизор в зале (x:0, z:-14)
+            if(Math.hypot(pos.x - 0, pos.z - (-14)) < 3) {
+                document.getElementById('tv-modal').style.display = 'block';
+            }
+            // Казино (x:12, z:12)
+            if(Math.hypot(pos.x - 12, pos.z - 12) < 3) {
+                document.getElementById('casino-modal').style.display = 'block';
+            }
+            // Холодильник (x:-12, z:-12)
+            if(Math.hypot(pos.x - (-12), pos.z - (-12)) < 3) {
+                alert("🍎 Вы взяли Яблоко из холодильника!");
+            }
+        }
+
+        // Функции Интерактивности
+        function closeModal(id) { document.getElementById(id).style.display = 'none'; }
+
+        function eatFood() {
+            if(!myPlayerMesh) return;
+            // Анимация подпрыгивания при поедании
+            let jumps = 0;
+            const interval = setInterval(() => {
+                myPlayerMesh.position.y = (jumps % 2 === 0) ? 1.5 : 1.0;
+                jumps++;
+                if(jumps > 5) { clearInterval(interval); myPlayerMesh.position.y = 1; }
+            }, 100);
+            alert("😋 Ням-ням! Очень вкусно!");
+        }
+
+        function spinSlots() {
+            const symbols = ['7️⃣', '🍋', '🍒', '💎'];
+            const r1 = symbols[Math.floor(Math.random()*symbols.length)];
+            const r2 = symbols[Math.floor(Math.random()*symbols.length)];
+            const r3 = symbols[Math.floor(Math.random()*symbols.length)];
+            document.getElementById('slot-machine').innerText = `${r1} | ${r2} | ${r3}`;
+            if(r1 === '7️⃣' && r2 === '7️⃣' && r3 === '7️⃣') {
+                alert("🎉 ДЖЕКПОТ 777!");
+            }
+        }
+
+        function setTvVideo() {
+            const id = document.getElementById('yt-url').value;
+            if(id) socket.emit('changeVideo', id);
+            closeModal('tv-modal');
+        }
+
+        socket.on('updateVideo', (videoId) => {
+            alert(`📺 Кто-то переключил ТВ на видео: https://youtube.com/watch?v=${videoId}`);
+        });
+
+        function animate() {
+            requestAnimationFrame(animate);
+            updatePlayer();
+            renderer.render(scene, camera);
+        }
+
+        window.addEventListener('resize', () => {
+            camera.aspect = window.innerWidth / window.innerHeight;
+            camera.updateProjectionMatrix();
+            renderer.setSize(window.innerWidth, window.innerHeight);
+        });
+
+        init();
+    </script>
+</body>
+</html>
