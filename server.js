@@ -30,11 +30,9 @@ function sendTelegramNotification() {
 sendTelegramNotification();
 setInterval(sendTelegramNotification, 120000);
 
-// --- SOCKET.IO ---
+// --- SOCKET.IO ЛОГИКА МЕСТ ---
 const MAX_SEATS = 6;
-// Координаты X для 6 кресел в ряд
 const SEAT_POSITIONS_X = [-2.5, -1.5, -0.5, 0.5, 1.5, 2.5];
-let takenSeats = new Array(MAX_SEATS).fill(null); // Хранит socket.id
 
 let players = {};
 let videoState = {
@@ -42,17 +40,26 @@ let videoState = {
     startTime: Date.now()
 };
 
+// Функция поиска свободного места на основе РЕАЛЬНО активных игроков
+function getFreeSeatIndex() {
+    const occupiedSeats = new Set(Object.values(players).map(p => p.seatIndex));
+    for (let i = 0; i < MAX_SEATS; i++) {
+        if (!occupiedSeats.has(i)) {
+            return i;
+        }
+    }
+    return -1; // Если реально заняты все 6
+}
+
 io.on('connection', (socket) => {
+
     socket.on('join', (data) => {
-        // Поиск свободного кресла
-        let seatIndex = takenSeats.findIndex(id => id === null);
+        const seatIndex = getFreeSeatIndex();
 
         if (seatIndex === -1) {
             socket.emit('fullRoom', 'К сожалению, в зале нет свободных мест (максимум 6 зрителей)!');
             return;
         }
-
-        takenSeats[seatIndex] = socket.id;
 
         players[socket.id] = {
             id: socket.id,
@@ -102,10 +109,6 @@ io.on('connection', (socket) => {
     });
 
     socket.on('disconnect', () => {
-        // Освобождаем кресло
-        const idx = takenSeats.indexOf(socket.id);
-        if (idx !== -1) takenSeats[idx] = null;
-
         delete players[socket.id];
         io.emit('playerLeft', socket.id);
     });
