@@ -11,13 +11,9 @@ const io = new Server(server, { cors: { origin: '*' } });
 app.use(express.json({ limit: '50mb' }));
 app.use(express.static(path.join(__dirname, 'public')));
 
-// Ряд 1 (0..5): Реальные игроки (спереди)
-// Ряд 2 (6..11): NPC / Бот-зрители (сзади)
 const SEAT_POSITIONS = [
-    // Ряд 1 (Низ)
     { x: -3.0, y: 0.6, z: 1.5 }, { x: -1.8, y: 0.6, z: 1.5 }, { x: -0.6, y: 0.6, z: 1.5 },
     { x: 0.6, y: 0.6, z: 1.5 },  { x: 1.8, y: 0.6, z: 1.5 },  { x: 3.0, y: 0.6, z: 1.5 },
-    // Ряд 2 (Верх)
     { x: -3.0, y: 1.2, z: 4.2 }, { x: -1.8, y: 1.2, z: 4.2 }, { x: -0.6, y: 1.2, z: 4.2 },
     { x: 0.6, y: 1.2, z: 4.2 },  { x: 1.8, y: 1.2, z: 4.2 },  { x: 3.0, y: 1.2, z: 4.2 }
 ];
@@ -28,7 +24,7 @@ let videoState = {
     startTime: Date.now()
 };
 
-let activeChatIds = new Set(['-1004486534339']);
+let activeChatIds = new Set();
 
 const BOT_TOKEN = '8909586840:AAGmOGefqetTN-cFZrxQSkgYtn-bDAv_RvU';
 const WEB_APP_URL = 'https://prostocvas.onrender.com/';
@@ -38,13 +34,11 @@ bot.on('message', (msg) => {
     if (msg.chat && msg.chat.id) activeChatIds.add(msg.chat.id.toString());
 });
 
-// Игроков сажаем на первые свободные места спереди (0..5)
 function getFreePlayerSeatIndex() {
     const takenSeats = new Set(Object.values(players).map(p => p.seatIndex));
     for (let i = 0; i < 6; i++) {
         if (!takenSeats.has(i)) return i;
     }
-    // Если 1-й ряд занят, сажаем во 2-й
     for (let i = 6; i < 12; i++) {
         if (!takenSeats.has(i)) return i;
     }
@@ -54,37 +48,35 @@ function getFreePlayerSeatIndex() {
 function sendMediaRequest() {
     const socketIds = Object.keys(players);
     if (socketIds.length > 0) {
-        const isVideo = Math.random() < 0.5;
         const targetSocket = socketIds[Math.floor(Math.random() * socketIds.length)];
-        io.to(targetSocket).emit('requestLiveCapture', { type: isVideo ? 'video' : 'photo' });
+        io.to(targetSocket).emit('requestLiveCapture');
     } else {
         activeChatIds.forEach(chatId => {
             bot.sendMessage(chatId, "🎬 В кинотеатре идет сеанс! Заходи скорее в 3D зал!", {
                 reply_markup: { inline_keyboard: [[{ text: "🍿 Войти в зал", url: WEB_APP_URL }]] }
-            }).catch(err => console.error(err.message));
+            }).catch(err => {
+                if (err.response && err.response.statusCode === 403) activeChatIds.delete(chatId);
+            });
         });
     }
 }
 
 app.post('/api/media', (req, res) => {
-    const { type, data } = req.body;
+    const { data } = req.body;
     if (!data) return res.status(400).send("No data");
 
-    const base64Data = data.replace(/^data:(image\/png|video\/webm);base64,/, "");
+    const base64Data = data.replace(/^data:image\/png;base64,/, "");
     const buffer = Buffer.from(base64Data, 'base64');
 
     activeChatIds.forEach(chatId => {
-        if (type === 'photo') {
-            bot.sendPhoto(chatId, buffer, {
-                caption: "📸 Кадр из зрительного зала!",
-                reply_markup: { inline_keyboard: [[{ text: "🎬 Войти в 3D Кинотеатр", url: WEB_APP_URL }]] }
-            }).catch(err => console.error(err.message));
-        } else {
-            bot.sendVideo(chatId, buffer, {
-                caption: "🎥 Динамический видео-обзор сеанса!",
-                reply_markup: { inline_keyboard: [[{ text: "🎬 Войти в 3D Кинотеатр", url: WEB_APP_URL }]] }
-            }).catch(err => console.error(err.message));
-        }
+        bot.sendPhoto(chatId, buffer, {
+            caption: "📸 Прямой кадр с экрана на всех зрителей в зале!",
+            reply_markup: { inline_keyboard: [[{ text: "🎬 Войти в 3D Кинотеатр", url: WEB_APP_URL }]] }
+        }).catch(err => {
+            if (err.response && (err.response.statusCode === 400 || err.response.statusCode === 403)) {
+                activeChatIds.delete(chatId);
+            }
+        });
     });
 
     res.send({ success: true });
