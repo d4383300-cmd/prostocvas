@@ -1,51 +1,391 @@
 <!DOCTYPE html>
 <html lang="ru">
 <head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
-  <title>Быстрее закрой дверь!</title>
-  <style>
-    body { margin: 0; overflow: hidden; font-family: Arial, sans-serif; user-select: none; background: #000; }
-    #canvas-container { width: 100vw; height: 100vh; }
-    
-    /* UI overlays */
-    #ui { position: absolute; top: 10px; left: 10px; color: #fff; text-shadow: 1px 1px 3px #000; pointer-events: none; }
-    #interact-btn { position: absolute; bottom: 80px; right: 20px; width: 80px; height: 80px; background: rgba(255,255,255,0.3); border: 2px solid #fff; border-radius: 50%; color: white; font-weight: bold; display: none; align-items: center; justify-content: center; }
-    
-    /* Mobile Controls */
-    #touch-zone { position: absolute; bottom: 20px; left: 20px; width: 120px; height: 120px; background: rgba(255,255,255,0.1); border-radius: 50%; border: 2px dashed rgba(255,255,255,0.4); display: none; }
-    #stick { position: absolute; top: 35px; left: 35px; width: 50px; height: 50px; background: rgba(255,255,255,0.5); border-radius: 50%; }
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Baldi's Basics 3D Classroom</title>
+    <style>
+        * { box-sizing: border-box; margin: 0; padding: 0; user-select: none; }
+        body { background: #000; overflow: hidden; font-family: 'Comic Sans MS', 'Courier New', monospace; }
+        #canvas-container { width: 100vw; height: 100vh; }
 
-    /* Chat UI */
-    #chat-box { position: absolute; bottom: 10px; left: 10px; width: 280px; pointer-events: auto; }
-    #chat-input { width: 70%; padding: 8px; border: none; border-radius: 4px; outline: none; }
-    #chat-btn { width: 25%; padding: 8px; background: #28a745; color: white; border: none; border-radius: 4px; font-weight: bold; }
-    
-    /* Roblox-like speech bubbles */
-    .bubble { position: absolute; background: rgba(255, 255, 255, 0.9); color: #000; padding: 6px 10px; border-radius: 10px; font-size: 12px; font-weight: bold; pointer-events: none; transform: translate(-50%, -100%); white-space: nowrap; border: 1px solid #000; display: none; }
-  </style>
+        /* Ретро Балди UI */
+        #board-ui {
+            position: absolute; top: 15px; left: 50%; transform: translateX(-50%);
+            background: #005500; border: 6px solid #663300; border-radius: 6px;
+            color: #fff; text-align: center; padding: 12px 24px; min-width: 320px;
+            box-shadow: 0 8px 0 #000; font-weight: bold;
+        }
+        #baldi-speech { font-size: 18px; color: #ffff00; text-shadow: 2px 2px #000; }
+        #math-problem { font-size: 32px; color: #ffffff; margin: 5px 0; text-shadow: 2px 2px #000; }
+        #timer-display { font-size: 20px; color: #ff3333; }
+
+        /* Ввод ответа */
+        #input-box {
+            position: absolute; bottom: 80px; left: 50%; transform: translateX(-50%);
+            display: none; background: #c0c0c0; border: 4px solid #000; padding: 10px;
+        }
+        #answer-input { font-size: 26px; width: 140px; text-align: center; border: 2px solid #000; padding: 4px; }
+        #btn-send { font-size: 24px; padding: 4px 16px; background: #00ff00; border: 2px solid #000; cursor: pointer; }
+
+        /* Чат */
+        #chat-wrap {
+            position: absolute; bottom: 10px; left: 10px; width: 260px; height: 140px;
+            background: rgba(0,0,0,0.7); border: 2px solid #fff; display: flex; flex-direction: column;
+        }
+        #chat-logs { flex: 1; overflow-y: auto; padding: 5px; color: #00ff00; font-size: 13px; }
+        #chat-input { background: #000; color: #fff; border: none; padding: 6px; border-top: 1px solid #fff; }
+
+        /* Touch-зона поворота для смартфонов */
+        #touch-surface { position: absolute; top: 0; left: 0; width: 100vw; height: 100vh; z-index: 1; }
+        #ui-layer { position: absolute; top: 0; left: 0; width: 100vw; height: 100vh; z-index: 2; pointer-events: none; }
+        .interactive { pointer-events: auto !important; }
+    </style>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
 </head>
 <body>
-  <div id="canvas-container"></div>
 
-  <div id="ui">
-    <h2 id="timer-display">ПОДГОТОВКА: 60s</h2>
-    <p id="status-display">Осмотритесь и прочтите правила на мониторе!</p>
-  </div>
+    <div id="canvas-container"></div>
+    <div id="touch-surface"></div>
 
-  <div id="interact-btn">E / НАЖАТЬ</div>
+    <div id="ui-layer">
+        <div id="board-ui">
+            <div id="baldi-speech">ДОБРО ПОЖАЛОВАТЬ В КЛАСС!</div>
+            <div id="math-problem">1 + 1 = ?</div>
+            <div id="timer-display">Время: 10</div>
+        </div>
 
-  <div id="touch-zone"><div id="stick"></div></div>
+        <div id="input-box" class="interactive">
+            <input type="number" id="answer-input" placeholder="Ответ">
+            <button id="btn-send" onclick="submitAnswer()">ОК</button>
+        </div>
 
-  <div id="chat-box">
-    <input type="text" id="chat-input" placeholder="Написать в чат (Enter)..." maxlength="40">
-    <button id="chat-btn">Отправить</button>
-  </div>
+        <div id="chat-wrap" class="interactive">
+            <div id="chat-logs"></div>
+            <input type="text" id="chat-input" placeholder="Чат (Enter)..." onkeydown="sendChat(event)">
+        </div>
+    </div>
 
-  <div id="bubble-container"></div>
+    <script>
+        let ws, myId, scene, camera, renderer;
+        let players3D = {};
+        let baldiMesh, rulerMesh;
+        let isSlapping = false;
+        const SEATS = [
+            { x: -2.2, z: -1 }, { x: 0, z: -1 }, { x: 2.2, z: -1 },
+            { x: -2.2, z: 2.5 }, { x: 0, z: 2.5 }, { x: 2.2, z: 2.5 }
+        ];
 
-  <script src="/socket.io/socket.io.js"></script>
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
-  <script src="app.js"></script>
+        function init() {
+            scene = new THREE.Scene();
+            scene.background = new THREE.Color(0x70A0D0);
+
+            camera = new THREE.PerspectiveCamera(65, window.innerWidth / window.innerHeight, 0.1, 1000);
+            renderer = new THREE.WebGLRenderer({ antialias: false });
+            renderer.setSize(window.innerWidth, window.innerHeight);
+            document.getElementById('canvas-container').appendChild(renderer.domElement);
+
+            const light = new THREE.AmbientLight(0xffffff, 0.9);
+            scene.add(light);
+
+            buildDetailedClassroom();
+            buildBaldi();
+            setupControls();
+            connect();
+
+            window.addEventListener('resize', onResize);
+            animate();
+        }
+
+        function buildDetailedClassroom() {
+            // Деревянный пол
+            const floor = new THREE.Mesh(
+                new THREE.PlaneGeometry(16, 18),
+                new THREE.MeshBasicMaterial({ color: 0x8B5A2B })
+            );
+            floor.rotation.x = -Math.PI / 2;
+            scene.add(floor);
+
+            // Стены
+            const wallMat = new THREE.MeshBasicMaterial({ color: 0xFFF8DC });
+            const backWall = new THREE.Mesh(new THREE.PlaneGeometry(16, 8), wallMat);
+            backWall.position.set(0, 4, -9);
+            scene.add(backWall);
+
+            // Доска
+            const board = new THREE.Mesh(
+                new THREE.BoxGeometry(9, 4.5, 0.1),
+                new THREE.MeshBasicMaterial({ color: 0x004000 })
+            );
+            board.position.set(0, 4, -8.9);
+            scene.add(board);
+
+            // Плакаты на стенах
+            const poster1 = new THREE.Mesh(new THREE.PlaneGeometry(2, 2), new THREE.MeshBasicMaterial({ color: 0xff0000 }));
+            poster1.position.set(-6, 5, -8.85);
+            scene.add(poster1);
+
+            // Парты и стулья
+            SEATS.forEach((pos, i) => {
+                const group = new THREE.Group();
+                // Стол
+                const desk = new THREE.Mesh(new THREE.BoxGeometry(1.4, 0.9, 0.9), new THREE.MeshBasicMaterial({ color: 0x5C4033 }));
+                desk.position.set(0, 0.45, 0);
+                // Тетрадь + Пенал
+                const book = new THREE.Mesh(new THREE.BoxGeometry(0.3, 0.04, 0.4), new THREE.MeshBasicMaterial({ color: 0x0000ff }));
+                book.position.set(-0.3, 0.92, 0);
+                const pencilBox = new THREE.Mesh(new THREE.BoxGeometry(0.15, 0.05, 0.3), new THREE.MeshBasicMaterial({ color: 0xffff00 }));
+                pencilBox.position.set(0.3, 0.92, 0);
+                
+                group.add(desk, book, pencilBox);
+                group.position.set(pos.x, 0, pos.z);
+                scene.add(group);
+            });
+        }
+
+        function buildBaldi() {
+            baldiMesh = new THREE.Group();
+
+            // Тело (Красное)
+            const body = new THREE.Mesh(new THREE.CylinderGeometry(0.35, 0.35, 1.4), new THREE.MeshBasicMaterial({ color: 0xff0000 }));
+            body.position.y = 1.3;
+            baldiMesh.add(body);
+
+            // Ноги (Синие)
+            const legs = new THREE.Mesh(new THREE.CylinderGeometry(0.2, 0.2, 1.2), new THREE.MeshBasicMaterial({ color: 0x0000ff }));
+            legs.position.y = 0.6;
+            baldiMesh.add(legs);
+
+            // Голова (Персиковая)
+            const head = new THREE.Mesh(new THREE.SphereGeometry(0.35, 16, 16), new THREE.MeshBasicMaterial({ color: 0xffdbac }));
+            head.position.y = 2.2;
+            baldiMesh.add(head);
+
+            // Губы / Губы
+            const lips = new THREE.Mesh(new THREE.BoxGeometry(0.2, 0.08, 0.1), new THREE.MeshBasicMaterial({ color: 0x880000 }));
+            lips.position.set(0, 2.1, 0.32);
+            baldiMesh.add(lips);
+
+            // 1 Волосина
+            const hair = new THREE.Mesh(new THREE.CylinderGeometry(0.01, 0.01, 0.3), new THREE.MeshBasicMaterial({ color: 0x000000 }));
+            hair.position.set(0, 2.6, 0);
+            baldiMesh.add(hair);
+
+            // Линейка
+            rulerMesh = new THREE.Mesh(new THREE.BoxGeometry(0.05, 0.8, 0.1), new THREE.MeshBasicMaterial({ color: 0x8B4513 }));
+            rulerMesh.position.set(0.5, 1.4, 0.3);
+            baldiMesh.add(rulerMesh);
+
+            baldiMesh.position.set(-4, 0, -7.5);
+            scene.add(baldiMesh);
+        }
+
+        function createStudent3D(id, isNPC, seatIdx) {
+            const group = new THREE.Group();
+
+            // Тело
+            const body = new THREE.Mesh(new THREE.CylinderGeometry(0.3, 0.3, 1.0), new THREE.MeshBasicMaterial({ color: isNPC ? 0x888888 : 0x00aa00 }));
+            body.position.y = 0.8;
+            group.add(body);
+
+            // Голова
+            const head = new THREE.Mesh(new THREE.SphereGeometry(0.3, 12, 12), new THREE.MeshBasicMaterial({ color: 0xffdbac }));
+            head.position.y = 1.5;
+            group.add(head);
+
+            // Портфель
+            const bag = new THREE.Mesh(new THREE.BoxGeometry(0.4, 0.5, 0.2), new THREE.MeshBasicMaterial({ color: 0x442200 }));
+            bag.position.set(0, 0.8, -0.35);
+            group.add(bag);
+
+            // 3D Баббл для ответов над головой
+            const bubbleCanvas = document.createElement('canvas');
+            bubbleCanvas.width = 128; bubbleCanvas.height = 64;
+            const ctx = bubbleCanvas.getContext('2d');
+            ctx.fillStyle = '#ffffff'; ctx.fillRect(0,0,128,64);
+            ctx.fillStyle = '#000000'; ctx.font = 'bold 30px sans-serif';
+            ctx.fillText('...', 40, 42);
+
+            const tex = new THREE.CanvasTexture(bubbleCanvas);
+            const bubble = new THREE.Mesh(new THREE.PlaneGeometry(0.8, 0.4), new THREE.MeshBasicMaterial({ map: tex, transparent: true }));
+            bubble.position.set(0, 2.1, 0);
+            bubble.visible = false;
+            group.add(bubble);
+
+            group.userData = { head, bubble, ctx, tex };
+            
+            const pos = SEATS[seatIdx] || { x: 0, z: 0 };
+            group.position.set(pos.x, 0, pos.z + 0.3);
+
+            scene.add(group);
+            players3D[id] = group;
+        }
+
+        function triggerBaldiSlap() {
+            isSlapping = true;
+            let counter = 0;
+            let interval = setInterval(() => {
+                counter++;
+                rulerMesh.rotation.x = Math.sin(counter * 0.8) * 1.2;
+                if (counter > 10) {
+                    clearInterval(interval);
+                    rulerMesh.rotation.x = 0;
+                    isSlapping = false;
+                }
+            }, 40);
+        }
+
+        function connect() {
+            const protocol = location.protocol === 'https:' ? 'wss:' : 'ws:';
+            ws = new WebSocket(`${protocol}//${location.host}`);
+
+            ws.onmessage = (e) => {
+                const data = JSON.parse(e.data);
+
+                if (data.type === 'INIT') myId = data.id;
+
+                if (data.type === 'START_ENTER_ANIMATION') {
+                    // Очистка старых моделей
+                    Object.keys(players3D).forEach(k => scene.remove(players3D[k]));
+                    players3D = {};
+
+                    // Спавн учеников
+                    Object.keys(data.players).forEach(pId => {
+                        createStudent3D(pId, data.players[pId].isNPC, data.players[pId].seat);
+                    });
+
+                    // Кинематографичная анимация захода
+                    document.getElementById('baldi-speech').innerText = "ПРИВЕТ! ЗАХОДИТЕ В КЛАСС!";
+                    camera.position.set(0, 2, 7);
+                    camera.lookAt(0, 1.5, -9);
+
+                    let mySeat = data.players[myId] ? data.players[myId].seat : 0;
+                    setTimeout(() => {
+                        const pos = SEATS[mySeat];
+                        // Садимся за свою парту (вид от 1-го лица)
+                        camera.position.set(pos.x, 1.25, pos.z + 0.3);
+                        camera.rotation.set(0, 0, 0);
+                    }, 3500);
+                }
+
+                if (data.type === 'NEW_TURN') {
+                    document.getElementById('math-problem').innerText = data.question;
+                    const isMe = (data.activePlayerId === myId);
+
+                    if (isMe) {
+                        document.getElementById('baldi-speech').innerText = "ТВОЯ ОЧЕРЕДЬ! ИДИ К ДОСКЕ!";
+                        document.getElementById('input-box').style.display = 'block';
+                        // Телепорт к доске
+                        camera.position.set(0, 1.6, -6);
+                    } else {
+                        document.getElementById('baldi-speech').innerText = `ОТВЕЧАЕТ УЧЕНИК...`;
+                        document.getElementById('input-box').style.display = 'none';
+                        // Возвращаемся на место за партой
+                        const mySeat = SEATS[players3D[myId]?.userData?.seat || 0];
+                        if (mySeat) camera.position.set(mySeat.x, 1.25, mySeat.z + 0.3);
+                    }
+                }
+
+                if (data.type === 'TIMER_TICK') {
+                    document.getElementById('timer-display').innerText = `Время: ${data.timer}`;
+                }
+
+                if (data.type === 'ANSWER_SUBMITTED') {
+                    triggerBaldiSlap();
+                    const p = players3D[data.id];
+                    if (p) {
+                        // Рисуем ответ в 3D баббле над головой
+                        const ud = p.userData;
+                        ud.ctx.fillStyle = '#ffffff'; ud.ctx.fillRect(0,0,128,64);
+                        ud.ctx.fillStyle = '#ff0000'; ud.ctx.font = 'bold 28px sans-serif';
+                        ud.ctx.fillText(data.text, 25, 42);
+                        ud.tex.needsUpdate = true;
+                        ud.bubble.visible = true;
+                        setTimeout(() => { ud.bubble.visible = false; }, 2000);
+                    }
+                }
+
+                if (data.type === 'HEAD_MOVED') {
+                    if (players3D[data.id] && data.id !== myId) {
+                        players3D[data.id].userData.head.rotation.y = data.rot.y;
+                        players3D[data.id].userData.head.rotation.x = data.rot.x;
+                    }
+                }
+
+                if (data.type === 'CHAT_MSG') {
+                    const logs = document.getElementById('chat-logs');
+                    logs.innerHTML += `<div><b>${data.id}:</b> ${data.text}</div>`;
+                    logs.scrollTop = logs.scrollHeight;
+                }
+            };
+        }
+
+        function setupControls() {
+            let dragging = false;
+            let lastPos = { x: 0, y: 0 };
+            const surf = document.getElementById('touch-surface');
+
+            const moveHead = (cx, cy) => {
+                if (!dragging) return;
+                const dx = (cx - lastPos.x) * 0.004;
+                const dy = (cy - lastPos.y) * 0.004;
+
+                camera.rotation.y -= dx;
+                camera.rotation.x = Math.max(-0.6, Math.min(0.6, camera.rotation.x - dy));
+                lastPos = { x: cx, y: cy };
+
+                if (ws && ws.readyState === 1) {
+                    ws.send(JSON.stringify({
+                        type: 'ROTATE_HEAD',
+                        rot: { x: camera.rotation.x, y: camera.rotation.y }
+                    }));
+                }
+            };
+
+            surf.addEventListener('mousedown', e => { dragging = true; lastPos = { x: e.clientX, y: e.clientY }; });
+            window.addEventListener('mouseup', () => dragging = false);
+            surf.addEventListener('mousemove', e => moveHead(e.clientX, e.clientY));
+
+            surf.addEventListener('touchstart', e => { dragging = true; lastPos = { x: e.touches[0].clientX, y: e.touches[0].clientY }; });
+            window.addEventListener('touchend', () => dragging = false);
+            surf.addEventListener('touchmove', e => moveHead(e.touches[0].clientX, e.touches[0].clientY));
+        }
+
+        function submitAnswer() {
+            const val = document.getElementById('answer-input').value;
+            if (val && ws) {
+                ws.send(JSON.stringify({ type: 'SUBMIT_ANSWER', answer: val }));
+                document.getElementById('answer-input').value = '';
+                document.getElementById('input-box').style.display = 'none';
+            }
+        }
+
+        function sendChat(e) {
+            if (e.key === 'Enter') {
+                const input = document.getElementById('chat-input');
+                if (input.value.trim() && ws) {
+                    ws.send(JSON.stringify({ type: 'CHAT', text: input.value }));
+                    input.value = '';
+                }
+            }
+        }
+
+        function onResize() {
+            camera.aspect = window.innerWidth / window.innerHeight;
+            camera.updateProjectionMatrix();
+            renderer.setSize(window.innerWidth, window.innerHeight);
+        }
+
+        function animate() {
+            requestAnimationFrame(animate);
+            // Покачивание Балди во времени
+            if (baldiMesh && !isSlapping) {
+                baldiMesh.position.y = Math.sin(Date.now() * 0.003) * 0.05;
+            }
+            renderer.render(scene, camera);
+        }
+
+        window.onload = init;
+    </script>
 </body>
 </html>
