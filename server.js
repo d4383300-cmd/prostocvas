@@ -2,7 +2,6 @@ const express = require('express');
 const http = require('http');
 const { Server } = require('socket.io');
 const TelegramBot = require('node-telegram-bot-api');
-const { createCanvas } = require('canvas');
 const path = require('path');
 
 const app = express();
@@ -41,55 +40,51 @@ io.on('connection', (socket) => {
   });
 });
 
-// Генерация снимка с "Камеры наблюдения №1"
+// Генерация снимка с камеры слежения без сбоев сборки
 bot.onText(/\/start/, (msg) => {
   const chatId = msg.chat.id;
-  
-  // Создаем картинку 600x400
-  const canvas = createCanvas(600, 400);
-  const ctx = canvas.getContext('2d');
-
-  // Фоны и Стены кинотеатра (Вид сверху-справа)
-  ctx.fillStyle = '#110b11';
-  ctx.fillRect(0, 0, 600, 400);
-
-  // Экран кинотеатра
-  ctx.fillStyle = '#4169e1';
-  ctx.fillRect(150, 20, 300, 15);
-  ctx.fillStyle = '#ffffff';
-  ctx.font = '12px sans-serif';
-  ctx.fillText('СВЕТЯЩИЙСЯ ЭКРАН ХУЮТУБ', 210, 32);
-
-  // Отрисовка кресел и игроков
   const playerIds = Object.keys(players);
+
+  // Отрисовка игроков для SVG схемы камеры
+  let playerDots = '';
   playerIds.forEach((id, idx) => {
     const p = players[id];
-    // Перевод 3D координат в 2D вид камеры
-    const mapX = 300 + p.x * 40;
-    const mapY = 200 + p.z * 30;
+    const mapX = 300 + Math.floor(p.x * 35);
+    const mapY = 220 + Math.floor(p.z * 25);
 
-    // Человек (Голова и тело)
-    ctx.fillStyle = '#ff4444';
-    ctx.beginPath();
-    ctx.arc(mapX, mapY, 12, 0, Math.PI * 2);
-    ctx.fill();
-
-    ctx.fillStyle = '#ffffff';
-    ctx.font = '10px sans-serif';
-    ctx.fillText(`Зритель #${idx + 1}`, mapX - 20, mapY + 25);
+    playerDots += `
+      <g>
+        <circle cx="${mapX}" cy="${mapY}" r="10" fill="#ff3333" stroke="#ffffff" stroke-width="2"/>
+        <text x="${mapX - 25}" y="${mapY + 24}" fill="#ffffff" font-size="12" font-family="sans-serif">Зритель #${idx + 1}</text>
+      </g>
+    `;
   });
 
-  // Эффект сетки камеры наблюдения
-  ctx.strokeStyle = 'rgba(0, 255, 0, 0.3)';
-  ctx.lineWidth = 1;
-  ctx.strokeRect(10, 10, 580, 380);
-  ctx.fillStyle = '#00ff00';
-  ctx.fillText('REC ● CAM-01 [КИНOATЕАТР]', 20, 30);
+  // SVG снимок от лица Камеры №1
+  const svgImage = `
+  <svg width="600" height="400" xmlns="http://www.w3.org/2000/svg">
+    <rect width="600" height="400" fill="#0d0814"/>
+    
+    <!-- Стены и Экран -->
+    <polygon points="50,50 550,50 500,120 100,120" fill="#1b1226" stroke="#332244" stroke-width="2"/>
+    <rect x="150" y="60" width="300" height="45" fill="#4169e1" rx="4"/>
+    <text x="210" y="87" fill="#ffffff" font-weight="bold" font-size="14" font-family="sans-serif">ЭКРАН КИНОТЕАТРА</text>
 
-  const buffer = canvas.toBuffer('image/png');
-  
-  bot.sendPhoto(chatId, buffer, {
-    caption: `🎥 **Камера наблюдения Хуютуб 3D**\n👥 Зрителей в зале: ${playerIds.length}`
+    <!-- Игроки в зале -->
+    ${playerDots}
+
+    <!-- Имитация интерфейса системы наблюдения -->
+    <rect x="10" y="10" width="580" height="380" fill="none" stroke="#00ff00" stroke-width="1" stroke-dasharray="8 4"/>
+    <circle cx="30" cy="30" r="6" fill="#ff0000"/>
+    <text x="45" y="34" fill="#00ff00" font-family="monospace" font-size="14">REC [CAM-01: ВЕРХНИЙ ПРАВЫЙ УГОЛ]</text>
+    <text x="450" y="34" fill="#00ff00" font-family="monospace" font-size="14">ONLINE: ${playerIds.length}</text>
+  </svg>
+  `;
+
+  const imgBuffer = Buffer.from(svgImage);
+
+  bot.sendPhoto(chatId, imgBuffer, {
+    caption: `🎥 **Камера наблюдения "Хуютуб 3D"**\n👥 Активных зрителей в зале: **${playerIds.length}**`
   });
 });
 
