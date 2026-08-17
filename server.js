@@ -2,13 +2,13 @@ const express = require('express');
 const http = require('http');
 const WebSocket = require('ws');
 const TelegramBot = require('node-telegram-bot-api');
+const sqlite3 = require('sqlite3').verbose();
 const path = require('path');
 
 const BOT_TOKEN = '8161722600:AAEef8zTPXRw7-fPgkHdkVX1pQqan7I5snY';
-const CHAT_ID = '-1004486534339'; // Новый ID чата
+const CHAT_ID = '-1004486534339';
 const PORT = process.env.PORT || 3000;
 
-// Список администраторов Telegram (в нижнем регистре без @)
 const ADMIN_USERNAMES = ['nubix_3', 'cqody', 'leymik', 'justsqueezeme'];
 
 const app = express();
@@ -18,7 +18,25 @@ const bot = new TelegramBot(BOT_TOKEN, { polling: true });
 
 app.use(express.static(path.join(__dirname, 'public')));
 
-// Генератор классических/смешных ников
+// Инициализация локальной базы данных SQLite
+const db = new sqlite3.Database('./database.db', (err) => {
+  if (err) console.error('Ошибка подключении к SQLite:', err.message);
+  else console.log('База данных SQLite успешно подключена.');
+});
+
+// Таблицы пользователей и предметов
+db.serialize(() => {
+  db.run(`CREATE TABLE IF NOT EXISTS users (
+    tg_id TEXT PRIMARY KEY,
+    username TEXT,
+    balance INTEGER DEFAULT 0,
+    is_admin INTEGER DEFAULT 0,
+    verified INTEGER DEFAULT 0,
+    nickname_color TEXT DEFAULT 'default'
+  )`);
+});
+
+// Генерация ников
 const NICK_PREFIXES = ['Ржавый', 'Солнечный', 'Позитивный', 'Хмурый', 'Бывалый', 'Мутный', 'Бешеный', 'Лысый', 'Фокусник', 'Дерзкий'];
 const NICK_NAMES = ['Толян', 'Вася', 'Жека', 'Илья', 'Серый', 'Миха', 'Батон', 'Пузо', 'Санёк', 'Димон', 'Вован'];
 
@@ -28,17 +46,13 @@ function generateClassicNickname() {
   return `${p} ${n}`;
 }
 
-// Хранилища данных
-const registeredUsers = new Map(); // tgId -> { tgId, username, balance, items, isAdmin }
-const authCodes = new Map();       // code -> ws
+const authCodes = new Map(); // code -> ws
 const recentMessages = [];
 const MAX_RECENT_MESSAGES = 5;
 
-// Муты: ip -> timestamp (до какого времени мут)
 const ipMutes = new Map();
-
-// Анти-спам и анти-ддос
-const userRateLimits = new Map(); // ip -> { msgCount, msgReset, callCount, callReset, blockedUntil }
+const userRateLimits = new Map();
+const activeCallUsers = new Set();
 
 function getClientIp(req, ws) {
   return ws._socket.remoteAddress || '127.0.0.1';
@@ -47,16 +61,14 @@ function getClientIp(req, ws) {
 function checkRateLimit(ip, actionType = 'msg') {
   const now = Date.now();
   let limit = userRateLimits.get(ip) || {
-    msgCount: 0,
-    msgReset: now,
-    callCount: 0,
-    callReset: now,
+    msgCount: 0, msgReset: now,
+    callCount: 0, callReset: now,
     blockedUntil: 0
   };
 
   if (now < limit.blockedUntil) {
     const leftSec = Math.ceil((limit.blockedUntil - now) / 1000);
-    return { ok: false, reason: `Вы временно отключены от действий за спам. Подождите ${leftSec} сек.` };
+    return { ok: false, reason: `Действия заблокированы из-за спама. Подождите ${leftSec} сек.` };
   }
 
   if (actionType === 'msg') {
@@ -66,7 +78,7 @@ function checkRateLimit(ip, actionType = 'msg') {
     }
     limit.msgCount++;
     if (limit.msgCount > 4) {
-      limit.blockedUntil = now + 10000; // 10 сек бан
+      limit.blockedUntil = now + 10000;
       userRateLimits.set(ip, limit);
       return { ok: false, reason: 'Слишком частые сообщения! Вы отключены на 10 секунд.' };
     }
@@ -78,7 +90,7 @@ function checkRateLimit(ip, actionType = 'msg') {
       limit.callReset = now;
     }
     limit.callCount++;
-    if (limit.callCount > 2) { // Не более 2 входов/выходов за 10 сек
+    if (limit.callCount > 2) {
       limit.blockedUntil = now + 10000;
       userRateLimits.set(ip, limit);
       return { ok: false, reason: 'Частое переподключение к звонку! Блокировка на 10 секунд.' };
@@ -88,9 +100,6 @@ function checkRateLimit(ip, actionType = 'msg') {
   userRateLimits.set(ip, limit);
   return { ok: true };
 }
-
-// Звонки: храним участников
-const activeCallUsers = new Set();
 
 function broadcast(data) {
   const json = JSON.stringify(data);
@@ -108,7 +117,6 @@ function saveMessageToHistory(msg) {
   }
 }
 
-// Генерация цифрового ID из IP
 function generateSiteId(ip) {
   let hash = 0;
   for (let i = 0; i < ip.length; i++) {
@@ -118,69 +126,61 @@ function generateSiteId(ip) {
   return Math.abs(hash % 9000) + 1000;
 }
 
-// --- Telegram Bot ---
+// Telegram Бот
 bot.on('message', async (msg) => {
   if (msg.chat.id.toString() !== CHAT_ID && msg.chat.type !== 'private') return;
 
-  // Авторизация /start <code>
   if (msg.chat.type === 'private' && msg.text && msg.text.startsWith('/start')) {
     const parts = msg.text.split(' ');
     if (parts.length > 1) {
       const code = parts[1];
       const sessionWs = authCodes.get(code);
       if (sessionWs) {
-        const tgUsername = (msg.from.username || '').toLowerCase();
-        const isAdmin = ADMIN_USERNAMES.includes(tgUsername);
+        const tgId = msg.from.id.toString();
+        const tgUsername = (msg.from.username || msg.from.first_name || '').toLowerCase();
+        const isAdmin = ADMIN_USERNAMES.includes(tgUsername) ? 1 : 0;
 
-        let user = registeredUsers.get(msg.from.id);
-        if (!user) {
-          user = {
-            tgId: msg.from.id,
-            username: msg.from.username || msg.from.first_name,
-            balance: 0,
-            isAdmin: isAdmin,
-            items: { verified: false, nicknameColor: 'default' }
-          };
-          registeredUsers.set(msg.from.id, user);
-        } else {
-          user.isAdmin = isAdmin;
-        }
+        db.get('SELECT * FROM users WHERE tg_id = ?', [tgId], (err, row) => {
+          if (!row) {
+            db.run('INSERT INTO users (tg_id, username, is_admin) VALUES (?, ?, ?)', [tgId, msg.from.first_name, isAdmin], function() {
+              loadAndAuthUser(tgId, sessionWs);
+            });
+          } else {
+            db.run('UPDATE users SET is_admin = ? WHERE tg_id = ?', [isAdmin, tgId], function() {
+              loadAndAuthUser(tgId, sessionWs);
+            });
+          }
+        });
 
-        sessionWs.userData.tgAccount = user;
-        sessionWs.send(JSON.stringify({ type: 'AUTH_SUCCESS', user }));
-        bot.sendMessage(msg.chat.id, `✅ Успешно привязано! Ваш баланс: ${user.balance} Травы.${user.isAdmin ? ' 👑 ВЫ АДМИНИСТРАТОР.' : ''}`);
+        bot.sendMessage(msg.chat.id, `✅ Аккаунт привязан к сайту "Прослушка"!`);
         authCodes.delete(code);
         return;
       }
     }
 
-    let user = registeredUsers.get(msg.from.id);
-    const balance = user ? user.balance : 0;
-    bot.sendMessage(msg.chat.id, `📋 **Профиль Прослушка**\n\nНик: ${msg.from.first_name}\nБаланс: ${balance} Травы\nАдмин: ${user?.isAdmin ? 'Да' : 'Нет'}`, {
-      parse_mode: 'Markdown',
-      reply_markup: {
-        inline_keyboard: [[{ text: '🎰 Играть в Казино', callback_data: 'play_casino' }]]
-      }
+    const tgId = msg.from.id.toString();
+    db.get('SELECT * FROM users WHERE tg_id = ?', [tgId], (err, user) => {
+      const balance = user ? user.balance : 0;
+      bot.sendMessage(msg.chat.id, `📋 **Профиль Прослушка**\n\nНик: ${msg.from.first_name}\nБаланс: ${balance} Травы`, {
+        parse_mode: 'Markdown',
+        reply_markup: {
+          inline_keyboard: [[{ text: '🎰 Играть в Казино', callback_data: 'play_casino' }]]
+        }
+      });
     });
     return;
   }
 
-  // Трансляция сообщений из TG в Чат на сайте
   if (msg.chat.id.toString() === CHAT_ID) {
-    const isBot = msg.from.is_bot;
     const authorName = msg.from.first_name || msg.from.username || 'Аноним';
-
     let textContent = msg.text || msg.caption || '';
-    let mediaUrl = null;
-    let mediaType = null;
+    let mediaUrl = null, mediaType = null;
 
     if (msg.photo) {
-      const fileId = msg.photo[msg.photo.length - 1].file_id;
-      mediaUrl = await bot.getFileLink(fileId);
+      mediaUrl = await bot.getFileLink(msg.photo[msg.photo.length - 1].file_id);
       mediaType = 'photo';
     } else if (msg.voice) {
-      const fileId = msg.voice.file_id;
-      mediaUrl = await bot.getFileLink(fileId);
+      mediaUrl = await bot.getFileLink(msg.voice.file_id);
       mediaType = 'voice';
     }
 
@@ -189,10 +189,9 @@ bot.on('message', async (msg) => {
       sender: authorName,
       siteId: 'TG',
       isTelegram: true,
-      isBot: isBot,
+      isBot: msg.from.is_bot,
       text: textContent,
-      mediaUrl,
-      mediaType,
+      mediaUrl, mediaType,
       timestamp: Date.now()
     };
 
@@ -201,26 +200,35 @@ bot.on('message', async (msg) => {
   }
 });
 
+function loadAndAuthUser(tgId, ws) {
+  db.get('SELECT * FROM users WHERE tg_id = ?', [tgId], (err, user) => {
+    if (user) {
+      ws.userData.tgAccount = user;
+      ws.send(JSON.stringify({ type: 'AUTH_SUCCESS', user }));
+    }
+  });
+}
+
 bot.on('callback_query', (query) => {
   if (query.data === 'play_casino') {
-    let user = registeredUsers.get(query.from.id);
-    if (!user || user.balance < 50) {
-      bot.answerCallbackQuery(query.id, { text: 'Недостаточно травы! Нужно минимум 50.', show_alert: true });
-      return;
-    }
-    const win = Math.random() > 0.5;
-    if (win) {
-      user.balance += 50;
-      bot.sendMessage(query.message.chat.id, `🎉 Победа! +50 Травы. Баланс: ${user.balance}`);
-    } else {
-      user.balance -= 50;
-      bot.sendMessage(query.message.chat.id, `🪦 Проигрыш! -50 Травы. Баланс: ${user.balance}`);
-    }
-    bot.answerCallbackQuery(query.id);
+    const tgId = query.from.id.toString();
+    db.get('SELECT * FROM users WHERE tg_id = ?', [tgId], (err, user) => {
+      if (!user || user.balance < 50) {
+        bot.answerCallbackQuery(query.id, { text: 'Недостаточно травы! Нужно минимум 50.', show_alert: true });
+        return;
+      }
+      const win = Math.random() > 0.5;
+      const newBalance = win ? user.balance + 50 : user.balance - 50;
+
+      db.run('UPDATE users SET balance = ? WHERE tg_id = ?', [newBalance, tgId], () => {
+        bot.sendMessage(query.message.chat.id, win ? `🎉 Победа! +50 Травы. Баланс: ${newBalance}` : `🪦 Проигрыш! -50 Травы. Баланс: ${newBalance}`);
+      });
+      bot.answerCallbackQuery(query.id);
+    });
   }
 });
 
-// --- WebSocket Соединения ---
+// WebSocket
 wss.on('connection', (ws, req) => {
   const clientIp = getClientIp(req, ws);
   const siteId = generateSiteId(clientIp);
@@ -232,7 +240,6 @@ wss.on('connection', (ws, req) => {
     tgAccount: null
   };
 
-  // Отправка истории
   ws.send(JSON.stringify({
     type: 'INIT_DATA',
     history: recentMessages,
@@ -245,14 +252,10 @@ wss.on('connection', (ws, req) => {
     try {
       const data = JSON.parse(message);
 
-      // Проверка на мут по IP
       const muteUntil = ipMutes.get(ws.userData.ip) || 0;
       if (Date.now() < muteUntil && ['SEND_MESSAGE'].includes(data.type)) {
         const remainingSec = Math.ceil((muteUntil - Date.now()) / 1000);
-        ws.send(JSON.stringify({
-          type: 'MUTE_ERROR',
-          message: `Вам выдан мут. Разблокировка через ${remainingSec} сек.`
-        }));
+        ws.send(JSON.stringify({ type: 'MUTE_ERROR', message: `У вас мут. Осталось ${remainingSec} сек.` }));
         return;
       }
 
@@ -267,38 +270,26 @@ wss.on('connection', (ws, req) => {
           let text = (data.text || '').trim();
           if (!text || text.length > 300) return;
 
-          // Проверка на Команды Админа (мут / размут)
           const userAcc = ws.userData.tgAccount;
-          const isAdmin = userAcc && userAcc.isAdmin;
+          const isAdmin = userAcc && userAcc.is_admin === 1;
 
           if (text.toLowerCase().startsWith('мут ') && isAdmin) {
-            // Формат: мут (минуты) (айди)
             const parts = text.split(' ');
             if (parts.length >= 3) {
               const mins = parseInt(parts[1]);
               const targetId = parseInt(parts[2]);
+              let foundIp = null;
+              wss.clients.forEach(c => {
+                if (c.userData && c.userData.siteId === targetId) foundIp = c.userData.ip;
+              });
 
-              if (!isNaN(mins) && !isNaN(targetId)) {
-                // Поиск IP по siteId среди подключенных
-                let foundIp = null;
-                wss.clients.forEach(c => {
-                  if (c.userData && c.userData.siteId === targetId) {
-                    foundIp = c.userData.ip;
-                  }
-                });
-
-                if (foundIp) {
-                  const banTime = Date.now() + mins * 60 * 1000;
-                  ipMutes.set(foundIp, banTime);
-                  broadcast({
-                    type: 'SYSTEM_NOTIFY',
-                    text: `🔇 Администратор выдал мут пользователю ID:${targetId} на ${mins} мин.`
-                  });
-                  return;
-                } else {
-                  ws.send(JSON.stringify({ type: 'ERROR', message: 'Пользователь с таким ID не найден на сайте!' }));
-                  return;
-                }
+              if (foundIp) {
+                ipMutes.set(foundIp, Date.now() + mins * 60 * 1000);
+                broadcast({ type: 'SYSTEM_NOTIFY', text: `🔇 Администратор замутил ID:${targetId} на ${mins} мин.` });
+                return;
+              } else {
+                ws.send(JSON.stringify({ type: 'ERROR', message: 'Пользователь не найден!' }));
+                return;
               }
             }
           }
@@ -307,30 +298,21 @@ wss.on('connection', (ws, req) => {
             const parts = text.split(' ');
             if (parts.length >= 2) {
               const targetId = parseInt(parts[1]);
-              let foundIp = null;
               wss.clients.forEach(c => {
-                if (c.userData && c.userData.siteId === targetId) {
-                  foundIp = c.userData.ip;
-                }
+                if (c.userData && c.userData.siteId === targetId) ipMutes.delete(c.userData.ip);
               });
-
-              if (foundIp) {
-                ipMutes.delete(foundIp);
-                broadcast({
-                  type: 'SYSTEM_NOTIFY',
-                  text: `🔊 Администратор размутил пользователя ID:${targetId}`
-                });
-                return;
-              }
+              broadcast({ type: 'SYSTEM_NOTIFY', text: `🔊 Размут пользователя ID:${targetId}` });
+              return;
             }
           }
 
-          // Начисление травы (шанс 2%, от 1 до 12)
+          // ШАНС ВЫПАДЕНИЯ ТРАВЫ = 7%
           let rewardText = '';
-          if (Math.random() <= 0.02) {
+          if (Math.random() <= 0.07) {
             const reward = Math.floor(Math.random() * 12) + 1;
             if (userAcc) {
               userAcc.balance += reward;
+              db.run('UPDATE users SET balance = ? WHERE tg_id = ?', [userAcc.balance, userAcc.tg_id]);
             }
             rewardText = `\n🎁 ${ws.userData.username} получил ${reward} Травы за активность!`;
           }
@@ -342,15 +324,14 @@ wss.on('connection', (ws, req) => {
             isTelegram: false,
             isBot: false,
             text: text,
-            badge: userAcc?.items?.verified || false,
-            color: userAcc?.items?.nicknameColor || 'default',
+            badge: userAcc?.verified === 1,
+            color: userAcc?.nickname_color || 'default',
             timestamp: Date.now()
           };
 
           saveMessageToHistory(payload);
           broadcast(payload);
 
-          // Передача в Telegram чат
           bot.sendMessage(CHAT_ID, `${ws.userData.username} : ${text}${rewardText}`);
 
           if (rewardText) {
@@ -369,7 +350,7 @@ wss.on('connection', (ws, req) => {
         case 'BUY_ITEM': {
           const userAcc = ws.userData.tgAccount;
           if (!userAcc) {
-            ws.send(JSON.stringify({ type: 'ERROR', message: 'Сначала привяжите Telegram аккаунт!' }));
+            ws.send(JSON.stringify({ type: 'ERROR', message: 'Сначала привяжите Telegram!' }));
             return;
           }
 
@@ -380,19 +361,20 @@ wss.on('connection', (ws, req) => {
           }
 
           userAcc.balance -= cost;
-          if (item === 'verified') userAcc.items.verified = true;
-          if (['rainbow', 'black_glow', 'white_glow'].includes(item)) {
-            userAcc.items.nicknameColor = item;
-          }
+          if (item === 'verified') userAcc.verified = 1;
+          if (['rainbow', 'black_glow', 'white_glow'].includes(item)) userAcc.nickname_color = item;
 
-          ws.send(JSON.stringify({ type: 'BUY_SUCCESS', user: userAcc }));
+          db.run('UPDATE users SET balance = ?, verified = ?, nickname_color = ? WHERE tg_id = ?', 
+            [userAcc.balance, userAcc.verified, userAcc.nickname_color, userAcc.tg_id], () => {
+              ws.send(JSON.stringify({ type: 'BUY_SUCCESS', user: userAcc }));
+            });
           break;
         }
 
         case 'PLAY_CASINO': {
           const userAcc = ws.userData.tgAccount;
           if (!userAcc) {
-            ws.send(JSON.stringify({ type: 'ERROR', message: 'Привяжите Telegram аккаунт для игры!' }));
+            ws.send(JSON.stringify({ type: 'ERROR', message: 'Привяжите Telegram аккаунт!' }));
             return;
           }
 
@@ -405,28 +387,25 @@ wss.on('connection', (ws, req) => {
           const roll = Math.floor(Math.random() * 100) + 1;
           let win = (mode === 'more' && roll > 50) || (mode === 'less' && roll < 50);
 
-          if (win) userAcc.balance += bet;
-          else userAcc.balance -= bet;
-
-          ws.send(JSON.stringify({ type: 'CASINO_RESULT', roll, win, newBalance: userAcc.balance }));
+          userAcc.balance = win ? userAcc.balance + bet : userAcc.balance - bet;
+          db.run('UPDATE users SET balance = ? WHERE tg_id = ?', [userAcc.balance, userAcc.tg_id], () => {
+            ws.send(JSON.stringify({ type: 'CASINO_RESULT', roll, win, newBalance: userAcc.balance }));
+          });
           break;
         }
 
-        // --- Управление Общим Звонком ---
         case 'JOIN_CALL': {
           const rate = checkRateLimit(ws.userData.ip, 'call');
           if (!rate.ok) {
             ws.send(JSON.stringify({ type: 'ERROR', message: rate.reason }));
             return;
           }
-
           if (!activeCallUsers.has(ws.userData.siteId)) {
             if (activeCallUsers.size === 0) {
-              bot.sendMessage(CHAT_ID, `📞 На сайте "Прослушка" начался общий звонок! Присоединяйтесь!`);
+              bot.sendMessage(CHAT_ID, `📞 На сайте началась трансляция в общем звонке!`);
             }
             activeCallUsers.add(ws.userData.siteId);
           }
-
           broadcast({ type: 'CALL_COUNT_UPDATE', count: activeCallUsers.size });
           break;
         }
@@ -462,5 +441,5 @@ wss.on('connection', (ws, req) => {
 });
 
 server.listen(PORT, () => {
-  console.log(`Запущен сервер на порту ${PORT}`);
+  console.log(`Сервер Прослушка запущен на порту ${PORT}`);
 });
