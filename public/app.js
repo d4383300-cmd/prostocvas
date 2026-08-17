@@ -1,9 +1,6 @@
 const socket = io();
 
 const isMobile = /Android|iPhone|iPad|iPod/i.test(navigator.userAgent);
-if (isMobile) {
-    document.getElementById('joystickZone').style.display = 'block';
-}
 
 let myNickname = "Зритель";
 if (window.Telegram && window.Telegram.WebApp) {
@@ -12,12 +9,11 @@ if (window.Telegram && window.Telegram.WebApp) {
     if (user) myNickname = user.username ? `@${user.username}` : user.first_name;
 }
 
-// 1. WebGL & CSS3D Сцены
+// 1. Сцены
 const scene = new THREE.Scene();
 scene.background = new THREE.Color(0x020204);
 
 const cssScene = new THREE.Scene();
-
 const camera = new THREE.PerspectiveCamera(65, window.innerWidth / window.innerHeight, 0.1, 50);
 
 const renderer = new THREE.WebGLRenderer({ antialias: true });
@@ -28,39 +24,74 @@ const cssRenderer = new THREE.CSS3DRenderer();
 cssRenderer.setSize(window.innerWidth, window.innerHeight);
 document.getElementById('css3d').appendChild(cssRenderer.domElement);
 
-// Освещение
-scene.add(new THREE.AmbientLight(0xffffff, 0.5));
+scene.add(new THREE.AmbientLight(0xffffff, 0.6));
 
-// 2. 3D Театр
+// 2. Детализированный 3D Зал
+// Пол
 const floor = new THREE.Mesh(
-    new THREE.PlaneGeometry(12, 16),
-    new THREE.MeshStandardMaterial({ color: 0x22080a })
+    new THREE.PlaneGeometry(10, 10),
+    new THREE.MeshStandardMaterial({ color: 0x1a0507, roughness: 0.8 })
 );
 floor.rotation.x = -Math.PI / 2;
 scene.add(floor);
 
-const wallMat = new THREE.MeshStandardMaterial({ color: 0x100b08 });
-const backWall = new THREE.Mesh(new THREE.PlaneGeometry(12, 6), wallMat);
-backWall.position.set(0, 3, -8);
+// Стены с молдингами
+const wallMat = new THREE.MeshStandardMaterial({ color: 0x0d090a });
+const backWall = new THREE.Mesh(new THREE.PlaneGeometry(10, 5), wallMat);
+backWall.position.set(0, 2.5, -5);
 scene.add(backWall);
 
-// Кресла
-const chairMat = new THREE.MeshStandardMaterial({ color: 0x4a0000 });
-for (let row = 0; row < 3; row++) {
-    for (let col = -2; col <= 2; col++) {
-        if (col === 0) continue;
-        const group = new THREE.Group();
-        const seat = new THREE.Mesh(new THREE.BoxGeometry(0.7, 0.2, 0.6), chairMat);
-        seat.position.y = 0.2;
-        const back = new THREE.Mesh(new THREE.BoxGeometry(0.7, 0.6, 0.1), chairMat);
-        back.position.set(0, 0.5, -0.25);
-        group.add(seat, back);
-        group.position.set(col * 0.9, 0, row * 1.5 - 1);
-        scene.add(group);
-    }
-}
+const leftWall = new THREE.Mesh(new THREE.PlaneGeometry(10, 5), wallMat);
+leftWall.position.set(-5, 2.5, 0);
+leftWall.rotation.y = Math.PI / 2;
+scene.add(leftWall);
 
-// 3. НАСТОЯЩИЙ CSS3D ВИДЕО ЭКРАН (Прямо в 3D мире!)
+const rightWall = leftWall.clone();
+rightWall.position.x = 5;
+rightWall.rotation.y = -Math.PI / 2;
+scene.add(rightWall);
+
+// Рама вокруг экрана
+const frameMat = new THREE.MeshStandardMaterial({ color: 0x330000 });
+const topFrame = new THREE.Mesh(new THREE.BoxGeometry(8.2, 0.2, 0.1), frameMat);
+topFrame.position.set(0, 4.8, -4.9);
+scene.add(topFrame);
+
+// 3. Создание Ряда из 6 Детализированных Кресел (Развернуты лицом к экрану -Z)
+const SEAT_POSITIONS_X = [-2.5, -1.5, -0.5, 0.5, 1.5, 2.5];
+const chairMat = new THREE.MeshStandardMaterial({ color: 0x5a0000 });
+const armMat = new THREE.MeshStandardMaterial({ color: 0x111111 });
+
+SEAT_POSITIONS_X.forEach((posX) => {
+    const chair = new THREE.Group();
+
+    // Сиденье
+    const seat = new THREE.Mesh(new THREE.BoxGeometry(0.8, 0.15, 0.7), chairMat);
+    seat.position.set(0, 0.4, 0);
+    chair.add(seat);
+
+    // Спинка (смотрит вперед на экран)
+    const back = new THREE.Mesh(new THREE.BoxGeometry(0.8, 0.8, 0.15), chairMat);
+    back.position.set(0, 0.8, 0.3);
+    chair.add(back);
+
+    // Подлокотники
+    const armL = new THREE.Mesh(new THREE.BoxGeometry(0.1, 0.3, 0.6), armMat);
+    armL.position.set(-0.42, 0.55, 0);
+    const armR = armL.clone();
+    armR.position.x = 0.42;
+    chair.add(armL, armR);
+
+    // Ножка
+    const leg = new THREE.Mesh(new THREE.CylinderGeometry(0.05, 0.05, 0.4), armMat);
+    leg.position.set(0, 0.2, 0);
+    chair.add(leg);
+
+    chair.position.set(posX, 0, 2.0);
+    scene.add(chair);
+});
+
+// 4. CSS3D Экран (Поддержан YouTube / VK / RuTube)
 const iframe = document.createElement('iframe');
 iframe.style.width = '800px';
 iframe.style.height = '450px';
@@ -68,7 +99,7 @@ iframe.style.border = '0px';
 iframe.allow = 'autoplay';
 
 const cssObject = new THREE.CSS3DObject(iframe);
-cssObject.position.set(0, 3, -7.89);
+cssObject.position.set(0, 2.6, -4.89);
 cssObject.scale.set(8 / 800, 4.5 / 450, 1);
 cssScene.add(cssObject);
 
@@ -84,7 +115,7 @@ function updateVideoFrame(url, time) {
     iframe.src = embedUrl;
 }
 
-// 4. Текстура Лица Персонажа
+// 5. Персонаж с ЛИЦОМ, СМОТРЯЩИМ НА ЭКРАН
 function createFaceTexture() {
     const canvas = document.createElement('canvas');
     canvas.width = 128; canvas.height = 128;
@@ -95,47 +126,64 @@ function createFaceTexture() {
 
     // Глаза
     ctx.fillStyle = '#000';
-    ctx.beginPath(); ctx.arc(35, 45, 10, 0, Math.PI * 2); ctx.fill();
-    ctx.beginPath(); ctx.arc(93, 45, 10, 0, Math.PI * 2); ctx.fill();
+    ctx.beginPath(); ctx.arc(35, 45, 8, 0, Math.PI * 2); ctx.fill();
+    ctx.beginPath(); ctx.arc(93, 45, 8, 0, Math.PI * 2); ctx.fill();
 
     // Улыбка
-    ctx.lineWidth = 6;
-    ctx.beginPath(); ctx.arc(64, 70, 30, 0.2, Math.PI - 0.2); ctx.stroke();
+    ctx.lineWidth = 5;
+    ctx.beginPath(); ctx.arc(64, 70, 25, 0.2, Math.PI - 0.2); ctx.stroke();
 
     return new THREE.CanvasTexture(canvas);
 }
 
 const faceTexture = createFaceTexture();
 
-function createHumanModel(nickname) {
+function createSeatedPlayer(nickname) {
     const group = new THREE.Group();
 
+    // Тело (сидит в кресле)
     const body = new THREE.Mesh(
-        new THREE.CylinderGeometry(0.18, 0.2, 0.7),
+        new THREE.BoxGeometry(0.5, 0.6, 0.4),
         new THREE.MeshStandardMaterial({ color: 0x1565c0 })
     );
-    body.position.y = 0.35;
+    body.position.set(0, 0.6, 0);
     group.add(body);
 
+    // Ноги (согнуты)
+    const legs = new THREE.Mesh(
+        new THREE.BoxGeometry(0.4, 0.15, 0.5),
+        new THREE.MeshStandardMaterial({ color: 0x0d47a1 })
+    );
+    legs.position.set(0, 0.4, -0.2);
+    group.add(legs);
+
+    // Голова
+    // Порядок материалов BoxGeometry: +X, -X, +Y, -Y, +Z, -Z
+    // Так как камера смотрит в -Z, ЛИЦО ПОМЕЩАЕМ НА -Z
     const headMat = [
         new THREE.MeshStandardMaterial({ color: 0xffdbac }),
         new THREE.MeshStandardMaterial({ color: 0xffdbac }),
         new THREE.MeshStandardMaterial({ color: 0xffdbac }),
         new THREE.MeshStandardMaterial({ color: 0xffdbac }),
-        new THREE.MeshStandardMaterial({ map: faceTexture }), // Лицо спереди
-        new THREE.MeshStandardMaterial({ color: 0xffdbac })
+        new THREE.MeshStandardMaterial({ color: 0x3e2723 }), // Затылок (+Z)
+        new THREE.MeshStandardMaterial({ map: faceTexture })  // Лицо (-Z, смотрит на экран)
     ];
 
-    const head = new THREE.Mesh(new THREE.BoxGeometry(0.3, 0.3, 0.3), headMat);
-    head.position.y = 0.85;
-    group.add(head);
+    const headGroup = new THREE.Group();
+    headGroup.name = "headGroup";
+    headGroup.position.set(0, 1.05, 0);
 
+    const head = new THREE.Mesh(new THREE.BoxGeometry(0.3, 0.3, 0.3), headMat);
+    headGroup.add(head);
+    group.add(headGroup);
+
+    // Чат-спрайт
     const labelCanvas = document.createElement('canvas');
     labelCanvas.width = 256; labelCanvas.height = 128;
     const labelTexture = new THREE.CanvasTexture(labelCanvas);
     const sprite = new THREE.Sprite(new THREE.SpriteMaterial({ map: labelTexture }));
-    sprite.position.y = 1.3;
-    sprite.scale.set(1.8, 0.9, 1);
+    sprite.position.set(0, 1.5, 0);
+    sprite.scale.set(1.6, 0.8, 1);
     group.add(sprite);
 
     group.userData = { nickname, canvas: labelCanvas, texture: labelTexture };
@@ -161,12 +209,11 @@ function updatePlayerLabel(group, message) {
     texture.needsUpdate = true;
 }
 
-// 5. Управление (ПК и Сенсорное)
+// 6. Управление ТОЛЬКО ВРАЩЕНИЕМ ГОЛОВЫ/КАМЕРЫ
 let myId = null;
+let mySeatIndex = null;
 let remotePlayers = {};
-let localPos = { x: 0, y: 0.8, z: 3 };
 let yaw = 0, pitch = 0;
-const keys = {};
 
 const webglEl = document.getElementById('webgl');
 webglEl.addEventListener('click', () => {
@@ -179,31 +226,32 @@ document.addEventListener('mousemove', (e) => {
         pitch -= e.movementY * 0.002;
         pitch = Math.max(-Math.PI / 3, Math.min(Math.PI / 3, pitch));
         camera.rotation.set(pitch, yaw, 0, 'YXZ');
+        socket.emit('look', { rotY: yaw });
     }
 });
 
-// Сенсорный осмотр экраном на телефоне
 let touchStartX = 0, touchStartY = 0;
 document.addEventListener('touchstart', (e) => {
-    if (e.touches.length === 1 && e.touches[0].clientX > window.innerWidth / 2) {
+    if (e.touches.length === 1) {
         touchStartX = e.touches[0].clientX;
         touchStartY = e.touches[0].clientY;
     }
 });
 document.addEventListener('touchmove', (e) => {
-    if (e.touches.length === 1 && e.touches[0].clientX > window.innerWidth / 2) {
+    if (e.touches.length === 1) {
         const dx = e.touches[0].clientX - touchStartX;
         const dy = e.touches[0].clientY - touchStartY;
-        yaw -= dx * 0.005;
-        pitch -= dy * 0.005;
+        yaw -= dx * 0.004;
+        pitch -= dy * 0.004;
         pitch = Math.max(-Math.PI / 3, Math.min(Math.PI / 3, pitch));
         camera.rotation.set(pitch, yaw, 0, 'YXZ');
         touchStartX = e.touches[0].clientX;
         touchStartY = e.touches[0].clientY;
+        socket.emit('look', { rotY: yaw });
     }
 });
 
-// Чат и кнопка видео
+// Чат и Модалки
 const chatInput = document.getElementById('chatInput');
 const chatHistory = document.getElementById('chatHistory');
 const modal = document.getElementById('videoModal');
@@ -231,9 +279,7 @@ document.addEventListener('keydown', (e) => {
             chatInput.focus();
         }
     }
-    keys[e.code] = true;
 });
-document.addEventListener('keyup', (e) => keys[e.code] = false);
 
 function submitVideoUrl() {
     const url = document.getElementById('videoUrlInput').value.trim();
@@ -243,11 +289,23 @@ function submitVideoUrl() {
     }
 }
 
-// 6. Сетевая синхронизация
+// 7. Сеть
 socket.emit('join', { nickname: myNickname });
+
+socket.on('fullRoom', (msg) => {
+    const overlay = document.getElementById('fullOverlay');
+    overlay.innerText = msg;
+    overlay.style.display = 'flex';
+});
 
 socket.on('init', (data) => {
     myId = data.id;
+    mySeatIndex = data.seatIndex;
+
+    // Помещаем камеру строго на уровень глаз в выбранном кресле
+    const seatX = SEAT_POSITIONS_X[mySeatIndex];
+    camera.position.set(seatX, 1.05, 2.0);
+
     for (let id in data.players) {
         if (id !== myId) addRemotePlayer(data.players[id]);
     }
@@ -261,9 +319,10 @@ socket.on('playerLeft', (id) => {
         delete remotePlayers[id];
     }
 });
-socket.on('playerMoved', (p) => {
-    if (remotePlayers[p.id]) {
-        remotePlayers[p.id].target = { x: p.x, y: p.y, z: p.z, ry: p.rotY };
+socket.on('playerLooked', (data) => {
+    if (remotePlayers[data.id]) {
+        const headGroup = remotePlayers[data.id].mesh.getObjectByName("headGroup");
+        if (headGroup) headGroup.rotation.y = data.rotY;
     }
 });
 socket.on('chatMessage', (data) => {
@@ -273,7 +332,7 @@ socket.on('chatMessage', (data) => {
     chatHistory.appendChild(msgEl);
     chatHistory.scrollTop = chatHistory.scrollHeight;
 
-    let model = (data.id === myId) ? null : remotePlayers[data.id]?.mesh;
+    let model = remotePlayers[data.id]?.mesh;
     if (model) {
         updatePlayerLabel(model, data.text);
         setTimeout(() => updatePlayerLabel(model, ""), 4000);
@@ -284,47 +343,15 @@ socket.on('videoStateUpdate', (state) => {
 });
 
 function addRemotePlayer(p) {
-    const mesh = createHumanModel(p.nickname);
-    mesh.position.set(p.x, p.y - 0.5, p.z);
+    const mesh = createSeatedPlayer(p.nickname);
+    mesh.position.set(p.x, 0, p.z);
     scene.add(mesh);
-    remotePlayers[p.id] = { mesh, target: { x: p.x, y: p.y - 0.5, z: p.z, ry: p.rotY } };
+    remotePlayers[p.id] = { mesh };
 }
 
-// 7. Игровой цикл
-const clock = new THREE.Clock();
-
+// 8. Цикл рендера
 function animate() {
     requestAnimationFrame(animate);
-    const delta = clock.getDelta();
-
-    const speed = 2.5 * delta;
-    const forward = new THREE.Vector3(0, 0, -1).applyQuaternion(camera.quaternion);
-    forward.y = 0; forward.normalize();
-    const side = new THREE.Vector3(1, 0, 0).applyQuaternion(camera.quaternion);
-    side.y = 0; side.normalize();
-
-    let moved = false;
-    if (keys['KeyW']) { localPos.x += forward.x * speed; localPos.z += forward.z * speed; moved = true; }
-    if (keys['KeyS']) { localPos.x -= forward.x * speed; localPos.z -= forward.z * speed; moved = true; }
-    if (keys['KeyA']) { localPos.x -= side.x * speed; localPos.z -= side.z * speed; moved = true; }
-    if (keys['KeyD']) { localPos.x += side.x * speed; localPos.z += side.z * speed; moved = true; }
-
-    localPos.x = Math.max(-5.5, Math.min(5.5, localPos.x));
-    localPos.z = Math.max(-7.5, Math.min(7.5, localPos.z));
-
-    camera.position.set(localPos.x, localPos.y, localPos.z);
-
-    if (moved) {
-        socket.emit('move', { x: localPos.x, y: localPos.y, z: localPos.z, rotY: yaw });
-    }
-
-    for (let id in remotePlayers) {
-        const p = remotePlayers[id];
-        p.mesh.position.x += (p.target.x - p.mesh.position.x) * 0.1;
-        p.mesh.position.y += (p.target.y - p.mesh.position.y) * 0.1;
-        p.mesh.position.z += (p.target.z - p.mesh.position.z) * 0.1;
-        p.mesh.rotation.y += (p.target.ry - p.mesh.rotation.y) * 0.1;
-    }
 
     renderer.render(scene, camera);
     cssRenderer.render(cssScene, camera);
