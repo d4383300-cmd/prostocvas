@@ -27,7 +27,6 @@ document.getElementById('css3d').appendChild(cssRenderer.domElement);
 scene.add(new THREE.AmbientLight(0xffffff, 0.6));
 
 // 2. Детализированный 3D Зал
-// Пол
 const floor = new THREE.Mesh(
     new THREE.PlaneGeometry(10, 10),
     new THREE.MeshStandardMaterial({ color: 0x1a0507, roughness: 0.8 })
@@ -35,7 +34,6 @@ const floor = new THREE.Mesh(
 floor.rotation.x = -Math.PI / 2;
 scene.add(floor);
 
-// Стены с молдингами
 const wallMat = new THREE.MeshStandardMaterial({ color: 0x0d090a });
 const backWall = new THREE.Mesh(new THREE.PlaneGeometry(10, 5), wallMat);
 backWall.position.set(0, 2.5, -5);
@@ -51,13 +49,12 @@ rightWall.position.x = 5;
 rightWall.rotation.y = -Math.PI / 2;
 scene.add(rightWall);
 
-// Рама вокруг экрана
 const frameMat = new THREE.MeshStandardMaterial({ color: 0x330000 });
 const topFrame = new THREE.Mesh(new THREE.BoxGeometry(8.2, 0.2, 0.1), frameMat);
 topFrame.position.set(0, 4.8, -4.9);
 scene.add(topFrame);
 
-// 3. Создание Ряда из 6 Детализированных Кресел (Развернуты лицом к экрану -Z)
+// 3. Создание Ряда из 6 Детализированных Кресел
 const SEAT_POSITIONS_X = [-2.5, -1.5, -0.5, 0.5, 1.5, 2.5];
 const chairMat = new THREE.MeshStandardMaterial({ color: 0x5a0000 });
 const armMat = new THREE.MeshStandardMaterial({ color: 0x111111 });
@@ -65,24 +62,20 @@ const armMat = new THREE.MeshStandardMaterial({ color: 0x111111 });
 SEAT_POSITIONS_X.forEach((posX) => {
     const chair = new THREE.Group();
 
-    // Сиденье
     const seat = new THREE.Mesh(new THREE.BoxGeometry(0.8, 0.15, 0.7), chairMat);
     seat.position.set(0, 0.4, 0);
     chair.add(seat);
 
-    // Спинка (смотрит вперед на экран)
     const back = new THREE.Mesh(new THREE.BoxGeometry(0.8, 0.8, 0.15), chairMat);
     back.position.set(0, 0.8, 0.3);
     chair.add(back);
 
-    // Подлокотники
     const armL = new THREE.Mesh(new THREE.BoxGeometry(0.1, 0.3, 0.6), armMat);
     armL.position.set(-0.42, 0.55, 0);
     const armR = armL.clone();
     armR.position.x = 0.42;
     chair.add(armL, armR);
 
-    // Ножка
     const leg = new THREE.Mesh(new THREE.CylinderGeometry(0.05, 0.05, 0.4), armMat);
     leg.position.set(0, 0.2, 0);
     chair.add(leg);
@@ -91,7 +84,7 @@ SEAT_POSITIONS_X.forEach((posX) => {
     scene.add(chair);
 });
 
-// 4. CSS3D Экран (Поддержан YouTube / VK / RuTube)
+// 4. CSS3D Экран
 const iframe = document.createElement('iframe');
 iframe.style.width = '800px';
 iframe.style.height = '450px';
@@ -115,7 +108,7 @@ function updateVideoFrame(url, time) {
     iframe.src = embedUrl;
 }
 
-// 5. Персонаж с ЛИЦОМ, СМОТРЯЩИМ НА ЭКРАН
+// 5. Персонаж с Лицом
 function createFaceTexture() {
     const canvas = document.createElement('canvas');
     canvas.width = 128; canvas.height = 128;
@@ -124,12 +117,10 @@ function createFaceTexture() {
     ctx.fillStyle = '#ffdbac';
     ctx.fillRect(0, 0, 128, 128);
 
-    // Глаза
     ctx.fillStyle = '#000';
     ctx.beginPath(); ctx.arc(35, 45, 8, 0, Math.PI * 2); ctx.fill();
     ctx.beginPath(); ctx.arc(93, 45, 8, 0, Math.PI * 2); ctx.fill();
 
-    // Улыбка
     ctx.lineWidth = 5;
     ctx.beginPath(); ctx.arc(64, 70, 25, 0.2, Math.PI - 0.2); ctx.stroke();
 
@@ -141,7 +132,6 @@ const faceTexture = createFaceTexture();
 function createSeatedPlayer(nickname) {
     const group = new THREE.Group();
 
-    // Тело (сидит в кресле)
     const body = new THREE.Mesh(
         new THREE.BoxGeometry(0.5, 0.6, 0.4),
         new THREE.MeshStandardMaterial({ color: 0x1565c0 })
@@ -149,7 +139,6 @@ function createSeatedPlayer(nickname) {
     body.position.set(0, 0.6, 0);
     group.add(body);
 
-    // Ноги (согнуты)
     const legs = new THREE.Mesh(
         new THREE.BoxGeometry(0.4, 0.15, 0.5),
         new THREE.MeshStandardMaterial({ color: 0x0d47a1 })
@@ -157,16 +146,13 @@ function createSeatedPlayer(nickname) {
     legs.position.set(0, 0.4, -0.2);
     group.add(legs);
 
-    // Голова
-    // Порядок материалов BoxGeometry: +X, -X, +Y, -Y, +Z, -Z
-    // Так как камера смотрит в -Z, ЛИЦО ПОМЕЩАЕМ НА -Z
     const headMat = [
         new THREE.MeshStandardMaterial({ color: 0xffdbac }),
         new THREE.MeshStandardMaterial({ color: 0xffdbac }),
         new THREE.MeshStandardMaterial({ color: 0xffdbac }),
         new THREE.MeshStandardMaterial({ color: 0xffdbac }),
-        new THREE.MeshStandardMaterial({ color: 0x3e2723 }), // Затылок (+Z)
-        new THREE.MeshStandardMaterial({ map: faceTexture })  // Лицо (-Z, смотрит на экран)
+        new THREE.MeshStandardMaterial({ color: 0x3e2723 }),
+        new THREE.MeshStandardMaterial({ map: faceTexture })
     ];
 
     const headGroup = new THREE.Group();
@@ -177,7 +163,6 @@ function createSeatedPlayer(nickname) {
     headGroup.add(head);
     group.add(headGroup);
 
-    // Чат-спрайт
     const labelCanvas = document.createElement('canvas');
     labelCanvas.width = 256; labelCanvas.height = 128;
     const labelTexture = new THREE.CanvasTexture(labelCanvas);
@@ -209,7 +194,7 @@ function updatePlayerLabel(group, message) {
     texture.needsUpdate = true;
 }
 
-// 6. Управление ТОЛЬКО ВРАЩЕНИЕМ ГОЛОВЫ/КАМЕРЫ
+// 6. Управление
 let myId = null;
 let mySeatIndex = null;
 let remotePlayers = {};
@@ -251,7 +236,6 @@ document.addEventListener('touchmove', (e) => {
     }
 });
 
-// Чат и Модалки
 const chatInput = document.getElementById('chatInput');
 const chatHistory = document.getElementById('chatHistory');
 const modal = document.getElementById('videoModal');
@@ -299,10 +283,11 @@ socket.on('fullRoom', (msg) => {
 });
 
 socket.on('init', (data) => {
+    document.getElementById('fullOverlay').style.display = 'none';
+
     myId = data.id;
     mySeatIndex = data.seatIndex;
 
-    // Помещаем камеру строго на уровень глаз в выбранном кресле
     const seatX = SEAT_POSITIONS_X[mySeatIndex];
     camera.position.set(seatX, 1.05, 2.0);
 
