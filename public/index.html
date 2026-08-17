@@ -3,64 +3,100 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
-    <title>3D Онлайн Кинотеатр</title>
+    <title>ХУЮТУБ 3D — Кинотеатр</title>
     <style>
-        body { margin: 0; overflow: hidden; background: #000; font-family: Arial, sans-serif; user-select: none; }
-        #canvas-container { width: 100vw; height: 100vh; display: block; }
-        
-        /* Модальное окно ввода ссылки */
-        #urlModal {
+        * { box-sizing: border-box; }
+        body, html { margin: 0; padding: 0; width: 100%; height: 100%; overflow: hidden; background: #000; font-family: 'Segoe UI', Arial, sans-serif; }
+        #canvas3d { width: 100vw; height: 100vh; display: block; cursor: pointer; }
+
+        /* Прицел по центру экрана */
+        #crosshair {
+            position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%);
+            width: 8px; height: 8px; background: rgba(255, 255, 255, 0.7);
+            border-radius: 50%; pointer-events: none; z-index: 10;
+        }
+
+        /* Подсказка управления */
+        #hint {
+            position: fixed; top: 15px; left: 15px; color: #fff;
+            background: rgba(0,0,0,0.6); padding: 10px 15px; border-radius: 8px;
+            pointer-events: none; font-size: 13px; z-index: 10; border: 1px solid #333;
+        }
+
+        /* Поле ввода видео по нажатию "T" */
+        #videoModal {
             display: none; position: fixed; top: 50%; left: 50%;
-            transform: translate(-50%, -50%); background: rgba(0, 0, 0, 0.9);
-            padding: 20px; border-radius: 12px; border: 1px solid #ff0055;
-            z-index: 100; text-align: center; color: white; width: 80%; max-width: 400px;
+            transform: translate(-50%, -50%); background: #18181c;
+            padding: 20px; border-radius: 12px; border: 2px solid #ff0055;
+            z-index: 100; text-align: center; color: white; width: 90%; max-width: 450px;
+            box-shadow: 0 0 30px rgba(255,0,85,0.4);
         }
-        #urlInput {
-            width: 90%; padding: 10px; margin: 10px 0; border-radius: 6px;
-            border: 1px solid #444; background: #222; color: white; outline: none;
+        #videoModal input {
+            width: 100%; padding: 12px; margin: 15px 0; border-radius: 6px;
+            border: 1px solid #333; background: #0d0d0f; color: #fff; outline: none; font-size: 14px;
         }
-        #btnSubmit {
-            padding: 10px 20px; background: #ff0055; color: white;
-            border: none; border-radius: 6px; cursor: pointer; font-weight: bold;
-        }
-
-        /* Кнопка смены видео для мобилок */
-        #mobileUrlBtn {
-            position: fixed; top: 15px; right: 15px; z-index: 90;
-            background: rgba(255, 0, 85, 0.8); color: white; border: none;
-            padding: 10px 15px; border-radius: 8px; font-weight: bold;
+        #videoModal button {
+            padding: 10px 25px; background: #ff0055; color: white;
+            border: none; border-radius: 6px; cursor: pointer; font-weight: bold; font-size: 14px;
         }
 
-        /* Виртуальный джойстик на мобильном */
-        #joystickZone {
-            position: fixed; bottom: 20px; left: 20px; width: 120px; height: 120px;
-            background: rgba(255, 255, 255, 0.1); border-radius: 60px;
-            z-index: 90; display: none; touch-action: none; border: 1px solid rgba(255,255,255,0.2);
+        /* Чат в левом нижнем углу */
+        #chatContainer {
+            position: fixed; bottom: 20px; left: 20px; width: 320px;
+            z-index: 10; pointer-events: none;
         }
-        #joystickKnob {
-            width: 50px; height: 50px; background: rgba(255, 0, 85, 0.8);
-            border-radius: 25px; position: absolute; top: 35px; left: 35px;
+        #chatHistory {
+            height: 160px; overflow-y: auto; display: flex; flex-direction: column;
+            gap: 6px; margin-bottom: 10px; text-shadow: 0 1px 2px #000;
+        }
+        .chat-msg {
+            background: rgba(0, 0, 0, 0.5); padding: 6px 10px; border-radius: 6px;
+            color: #fff; font-size: 13px; word-break: break-word; width: fit-content; max-width: 100%;
+        }
+        .chat-msg b { color: #ff3366; }
+        #chatInput {
+            width: 100%; padding: 10px; border-radius: 6px; border: 1px solid #444;
+            background: rgba(0, 0, 0, 0.8); color: #fff; outline: none; pointer-events: auto; display: none;
+        }
+
+        /* Экранный виртуальный плеер (3D Экран) */
+        #screenFrame {
+            position: absolute; width: 1000px; height: 562px;
+            visibility: hidden; pointer-events: none;
         }
     </style>
-    <!-- Подключение Telegram WebApp SDK -->
     <script src="https://telegram.org/js/telegram-web-app.js"></script>
-    <!-- Three.js & Socket.io -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
     <script src="/socket.io/socket.io.js"></script>
 </head>
 <body>
 
-    <button id="mobileUrlBtn" onclick="toggleUrlModal()">Вставить видео (Т)</button>
-
-    <div id="urlModal">
-        <h3>Вставьте ссылку на Direct MP4/WebM</h3>
-        <input type="text" id="urlInput" placeholder="https://site.com/video.mp4">
-        <br>
-        <button id="btnSubmit" onclick="submitUrl()">Запустить видео</button>
+    <div id="crosshair"></div>
+    <div id="hint">
+        🖱️ <b>Клик по экрану</b> — Захват мыши<br>
+        ⌨️ <b>W, A, S, D</b> — Ходить<br>
+        💬 <b>Enter</b> — Открыть чат<br>
+        🎬 <b>Клавиша "T"</b> — Вставить ссылку (YouTube, VK, RuTube, MP4)
     </div>
 
-    <div id="joystickZone"><div id="joystickKnob"></div></div>
-    <div id="canvas-container"></div>
+    <!-- Модальное окно по клавише T -->
+    <div id="videoModal">
+        <h3>Вставить ссылку на видео</h3>
+        <p style="font-size: 12px; color: #aaa;">Поддерживаются: YouTube, VK Видео, RuTube, Direct MP4</p>
+        <input type="text" id="videoUrlInput" placeholder="https://www.youtube.com/watch?v=...">
+        <button onclick="submitVideoUrl()">Запустить для всех</button>
+    </div>
+
+    <!-- Чат -->
+    <div id="chatContainer">
+        <div id="chatHistory"></div>
+        <input type="text" id="chatInput" placeholder="Нажмите Enter для отправки..." maxlength="100">
+    </div>
+
+    <!-- HTML5 Плеер для iframe 3D текстур -->
+    <iframe id="screenFrame" allow="autoplay"></iframe>
+
+    <canvas id="canvas3d"></canvas>
 
     <script src="app.js"></script>
 </body>
