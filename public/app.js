@@ -54,7 +54,7 @@ const topFrame = new THREE.Mesh(new THREE.BoxGeometry(8.2, 0.2, 0.1), frameMat);
 topFrame.position.set(0, 4.8, -4.9);
 scene.add(topFrame);
 
-// 3. Создание Ряда из 6 Детализированных Кресел
+// 3. Создание Ряда из 6 Кресел
 const SEAT_POSITIONS_X = [-2.5, -1.5, -0.5, 0.5, 1.5, 2.5];
 const chairMat = new THREE.MeshStandardMaterial({ color: 0x5a0000 });
 const armMat = new THREE.MeshStandardMaterial({ color: 0x111111 });
@@ -108,7 +108,7 @@ function updateVideoFrame(url, time) {
     iframe.src = embedUrl;
 }
 
-// 5. Персонаж с Лицом
+// 5. Персонажи и Танцоры
 function createFaceTexture() {
     const canvas = document.createElement('canvas');
     canvas.width = 128; canvas.height = 128;
@@ -129,12 +129,12 @@ function createFaceTexture() {
 
 const faceTexture = createFaceTexture();
 
-function createSeatedPlayer(nickname) {
+function createSeatedPlayer(nickname, bodyColor = 0x1565c0) {
     const group = new THREE.Group();
 
     const body = new THREE.Mesh(
         new THREE.BoxGeometry(0.5, 0.6, 0.4),
-        new THREE.MeshStandardMaterial({ color: 0x1565c0 })
+        new THREE.MeshStandardMaterial({ color: bodyColor })
     );
     body.position.set(0, 0.6, 0);
     group.add(body);
@@ -194,11 +194,30 @@ function updatePlayerLabel(group, message) {
     texture.needsUpdate = true;
 }
 
-// 6. Управление
+// 6. Танцоры для режима СТРИМ
+let dancers = [];
+function createDancers() {
+    clearDancers();
+    const colors = [0xff0055, 0x00ffcc, 0xffcc00, 0x9900ff];
+    for (let i = 0; i < 4; i++) {
+        const dancer = createSeatedPlayer(`Dancer #${i+1}`, colors[i]);
+        dancer.position.set(-1.8 + i * 1.2, 0, -1.5);
+        scene.add(dancer);
+        dancers.push(dancer);
+    }
+}
+
+function clearDancers() {
+    dancers.forEach(d => scene.remove(d));
+    dancers = [];
+}
+
+// 7. Управление и Чат (Адаптировано для Телефона)
 let myId = null;
 let mySeatIndex = null;
 let remotePlayers = {};
 let yaw = 0, pitch = 0;
+let isStreamMode = false;
 
 const webglEl = document.getElementById('webgl');
 webglEl.addEventListener('click', () => {
@@ -206,7 +225,7 @@ webglEl.addEventListener('click', () => {
 });
 
 document.addEventListener('mousemove', (e) => {
-    if (document.pointerLockElement === webglEl) {
+    if (document.pointerLockElement === webglEl && !isStreamMode) {
         yaw -= e.movementX * 0.002;
         pitch -= e.movementY * 0.002;
         pitch = Math.max(-Math.PI / 3, Math.min(Math.PI / 3, pitch));
@@ -223,7 +242,7 @@ document.addEventListener('touchstart', (e) => {
     }
 });
 document.addEventListener('touchmove', (e) => {
-    if (e.touches.length === 1) {
+    if (e.touches.length === 1 && !isStreamMode) {
         const dx = e.touches[0].clientX - touchStartX;
         const dy = e.touches[0].clientY - touchStartY;
         yaw -= dx * 0.004;
@@ -236,32 +255,41 @@ document.addEventListener('touchmove', (e) => {
     }
 });
 
+const chatInputContainer = document.getElementById('chatInputContainer');
 const chatInput = document.getElementById('chatInput');
 const chatHistory = document.getElementById('chatHistory');
 const modal = document.getElementById('videoModal');
 
-document.getElementById('btnChat').onclick = () => {
-    chatInput.style.display = chatInput.style.display === 'block' ? 'none' : 'block';
-    if (chatInput.style.display === 'block') chatInput.focus();
-};
+function toggleChat() {
+    const isVisible = chatInputContainer.style.display === 'flex';
+    chatInputContainer.style.display = isVisible ? 'none' : 'flex';
+    if (!isVisible) chatInput.focus();
+}
+
+function sendMessage() {
+    const text = chatInput.value.trim();
+    if (text) socket.emit('chatMessage', text);
+    chatInput.value = '';
+    chatInputContainer.style.display = 'none';
+}
+
+document.getElementById('btnChat').onclick = toggleChat;
 document.getElementById('btnVideo').onclick = () => {
     modal.style.display = modal.style.display === 'block' ? 'none' : 'block';
 };
+
+chatInput.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') {
+        sendMessage();
+    }
+});
 
 document.addEventListener('keydown', (e) => {
     if ((e.code === 'KeyT' || e.key === 'е') && document.activeElement !== chatInput) {
         modal.style.display = modal.style.display === 'block' ? 'none' : 'block';
     }
-    if (e.code === 'Enter') {
-        if (document.activeElement === chatInput) {
-            const text = chatInput.value.trim();
-            if (text) socket.emit('chatMessage', text);
-            chatInput.value = '';
-            chatInput.style.display = 'none';
-        } else {
-            chatInput.style.display = 'block';
-            chatInput.focus();
-        }
+    if (e.code === 'Enter' && document.activeElement !== chatInput) {
+        toggleChat();
     }
 });
 
@@ -270,10 +298,11 @@ function submitVideoUrl() {
     if (url) {
         socket.emit('changeVideo', url);
         modal.style.display = 'none';
+        document.getElementById('videoUrlInput').value = '';
     }
 }
 
-// 7. Сеть
+// 8. Сетевое взаимодействие
 socket.emit('join', { nickname: myNickname });
 
 socket.on('fullRoom', (msg) => {
@@ -288,13 +317,13 @@ socket.on('init', (data) => {
     myId = data.id;
     mySeatIndex = data.seatIndex;
 
-    const seatX = SEAT_POSITIONS_X[mySeatIndex];
-    camera.position.set(seatX, 1.05, 2.0);
+    resetCameraPosition();
 
     for (let id in data.players) {
         if (id !== myId) addRemotePlayer(data.players[id]);
     }
-    updateVideoFrame(data.videoState.url, data.videoState.currentTime);
+    
+    handleVideoState(data.videoState);
 });
 
 socket.on('playerJoined', (p) => addRemotePlayer(p));
@@ -323,9 +352,32 @@ socket.on('chatMessage', (data) => {
         setTimeout(() => updatePlayerLabel(model, ""), 4000);
     }
 });
+
 socket.on('videoStateUpdate', (state) => {
-    updateVideoFrame(state.url, state.currentTime);
+    handleVideoState(state);
 });
+
+function handleVideoState(state) {
+    isStreamMode = !!state.isStreamMode;
+    updateVideoFrame(state.url, state.currentTime);
+
+    if (isStreamMode) {
+        createDancers();
+    } else {
+        clearDancers();
+        resetCameraPosition();
+    }
+}
+
+function resetCameraPosition() {
+    if (mySeatIndex !== null) {
+        const seatX = SEAT_POSITIONS_X[mySeatIndex];
+        camera.position.set(seatX, 1.05, 2.0);
+        camera.rotation.set(0, 0, 0);
+        yaw = 0;
+        pitch = 0;
+    }
+}
 
 function addRemotePlayer(p) {
     const mesh = createSeatedPlayer(p.nickname);
@@ -334,9 +386,28 @@ function addRemotePlayer(p) {
     remotePlayers[p.id] = { mesh };
 }
 
-// 8. Цикл рендера
+// 9. Анимации и Цикл Рендера
+let clock = new THREE.Clock();
+
 function animate() {
     requestAnimationFrame(animate);
+
+    const time = clock.getElapsedTime();
+
+    // Анимация танцоров в режиме "стрим"
+    if (isStreamMode && dancers.length > 0) {
+        dancers.forEach((dancer, idx) => {
+            dancer.position.y = Math.abs(Math.sin(time * 5 + idx)) * 0.3;
+            dancer.rotation.y = Math.sin(time * 3 + idx) * 0.5;
+        });
+
+        // Плавная смена ракурсов камеры
+        const cameraAngle = time * 0.4;
+        camera.position.x = Math.sin(cameraAngle) * 4;
+        camera.position.z = Math.cos(cameraAngle) * 3 + 1;
+        camera.position.y = 1.8 + Math.sin(time * 0.8) * 0.4;
+        camera.lookAt(0, 0.8, 1.5);
+    }
 
     renderer.render(scene, camera);
     cssRenderer.render(cssScene, camera);
