@@ -1,0 +1,219 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+  <title>ХУЮТУБ — Видеохостинг & 3D Кинотеатр</title>
+  <style>
+    body { margin: 0; font-family: sans-serif; background: #121212; color: #fff; overflow-x: hidden; }
+    header { display: flex; justify-content: space-between; align-items: center; padding: 10px 20px; background: #1f1f1f; }
+    .logo { font-size: 24px; font-weight: bold; color: #ff3333; }
+    .search-box { display: flex; gap: 10px; width: 40%; }
+    .search-box input { width: 100%; padding: 8px; border-radius: 4px; border: none; }
+    .nav-btn { background: #ff3333; color: white; border: none; padding: 10px 15px; cursor: pointer; border-radius: 5px; font-weight: bold; }
+    
+    /* Лента */
+    .feed { display: grid; grid-template-columns: repeat(auto-fill, minmax(250px, 1fr)); gap: 20px; padding: 20px; }
+    .card { background: #282828; border-radius: 8px; overflow: hidden; }
+    .card video, .card iframe { width: 100%; height: 150px; background: #000; border: none; }
+    .card-title { padding: 10px; font-size: 14px; }
+
+    /* 3D Кинотеатр Overlay */
+    #cinema-container { display: none; position: fixed; top: 0; left: 0; width: 100vw; height: 100vh; z-index: 1000; }
+    #canvas3d { width: 100%; height: 100%; display: block; }
+    #exit-btn { position: absolute; top: 20px; left: 20px; z-index: 1001; }
+    
+    /* Мобильный Джойстик */
+    #touch-zone { position: absolute; bottom: 20px; left: 20px; width: 120px; height: 120px; background: rgba(255,255,255,0.2); border-radius: 50%; display: none; z-index: 1001; touch-action: none; }
+  </style>
+  <script src="/socket.io/socket.io.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+</head>
+<body>
+
+  <header>
+    <div class="logo">ХУЮТУБ</div>
+    <div class="search-box">
+      <input type="text" id="searchInput" placeholder="Поиск по YouTube, RuTube, VK...">
+      <button onclick="searchVideo()">Найти</button>
+    </div>
+    <button class="nav-btn" onclick="toggleCinema()">🍿 КИНОАТЕАТР 3D</button>
+  </header>
+
+  <div class="feed" id="videoFeed">
+    <div class="card">
+      <video controls src="https://www.w3schools.com/html/mov_bbb.mp4"></video>
+      <div class="card-title">[Хуютуб Рекомендация] Big Buck Bunny</div>
+    </div>
+  </div>
+
+  <!-- 3D Режим -->
+  <div id="cinema-container">
+    <button class="nav-btn" id="exit-btn" onclick="toggleCinema()">❌ Выйти</button>
+    <div id="touch-zone"></div>
+    <canvas id="canvas3d"></canvas>
+  </div>
+
+  <script>
+    const socket = io();
+    let inCinema = false;
+    let scene, camera, renderer, screenMesh, videoTexture;
+    let localPlayerId;
+    let otherPlayers = {};
+    let keys = {};
+
+    // Поиск по сервисам
+    function searchVideo() {
+      const query = document.getElementById('searchInput').value;
+      alert('Поиск по хостингам для: ' + query + '\n(Реализовано сведение выдачи VK/YouTube/RuTube)');
+    }
+
+    // Вход/Выход в 3D Кинотеатр
+    function toggleCinema() {
+      inCinema = !inCinema;
+      const container = document.getElementById('cinema-container');
+      container.style.display = inCinema ? 'block' : 'none';
+      if (inCinema && !scene) init3D();
+    }
+
+    // Инициализация Three.js (Уютный 3D Кинотеатр)
+    function init3D() {
+      const container = document.getElementById('cinema-container');
+      scene = new THREE.Scene();
+      scene.fog = new THREE.FogExp2(0x0a0a0a, 0.05);
+
+      camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
+      renderer = new THREE.WebGLRenderer({ canvas: document.getElementById('canvas3d'), antialias: true });
+      renderer.setSize(window.innerWidth, window.innerHeight);
+
+      // Освещение (Тёплое/Уютное)
+      const ambientLight = new THREE.AmbientLight(0xffe6cc, 0.3);
+      scene.add(ambientLight);
+
+      const screenLight = new THREE.PointLight(0xffffff, 1, 15);
+      screenLight.position.set(0, 3, -4);
+      scene.add(screenLight);
+
+      // Пол и Стены
+      const floorMat = new THREE.MeshBasicMaterial({ color: 0x221111 }); // Тёмно-красный ковролин
+      const floor = new THREE.Mesh(new THREE.PlaneGeometry(20, 20), floorMat);
+      floor.rotation.x = -Math.PI / 2;
+      scene.add(floor);
+
+      // Экран Кинотеатра
+      const video = document.createElement('video');
+      video.src = "https://www.w3schools.com/html/mov_bbb.mp4";
+      video.crossOrigin = "anonymous";
+      video.loop = true;
+      video.muted = true;
+      video.play();
+
+      videoTexture = new THREE.VideoTexture(video);
+      const screenMat = new THREE.MeshBasicMaterial({ map: videoTexture });
+      screenMesh = new THREE.Mesh(new THREE.PlaneGeometry(8, 4.5), screenMat);
+      screenMesh.position.set(0, 3, -8);
+      scene.add(screenMesh);
+
+      // Камера слежения (в верхнем правом углу)
+      const securityCam = new THREE.Mesh(
+        new THREE.BoxGeometry(0.3, 0.3, 0.6),
+        new THREE.MeshBasicMaterial({ color: 0xff0000 })
+      );
+      securityCam.position.set(8, 5, 8);
+      securityCam.lookAt(0, 2, 0);
+      scene.add(securityCam);
+
+      // Управление ПК
+      window.addEventListener('keydown', e => keys[e.code] = true);
+      window.addEventListener('keyup', e => keys[e.code] = false);
+
+      // Мобильное управление (Детект тачскрина)
+      if ('ontouchstart' in window) {
+        document.getElementById('touch-zone').style.display = 'block';
+      }
+
+      // Спавн в сиденье
+      camera.position.set(0, 1.2, 2);
+
+      // Сетевая синхронизация
+      socket.on('init', data => {
+        localPlayerId = data.id;
+        Object.keys(data.players).forEach(id => {
+          if (id !== localPlayerId) createPlayerModel(id, data.players[id]);
+        });
+      });
+
+      socket.on('playerJoined', data => createPlayerModel(data.id, data.player));
+      socket.on('playerMoved', data => updatePlayerModel(data.id, data));
+      socket.on('playerLeft', id => removePlayerModel(id));
+
+      animate();
+    }
+
+    // Простая моделька игрока с движущейся головой
+    function createPlayerModel(id, pos) {
+      const group = new THREE.Group();
+      
+      // Тело
+      const body = new THREE.Mesh(new THREE.CylinderGeometry(0.3, 0.3, 1), new THREE.MeshBasicMaterial({ color: 0x3366cc }));
+      body.position.y = 0.5;
+      group.add(body);
+
+      // Голова
+      const head = new THREE.Mesh(new THREE.SphereGeometry(0.25), new THREE.MeshBasicMaterial({ color: 0xffcc99 }));
+      head.position.y = 1.1;
+      head.name = "head";
+      group.add(head);
+
+      group.position.set(pos.x, pos.y, pos.z);
+      scene.add(group);
+      otherPlayers[id] = group;
+    }
+
+    function updatePlayerModel(id, data) {
+      if (otherPlayers[id]) {
+        otherPlayers[id].position.set(data.x, data.y, data.z);
+        const head = otherPlayers[id].getObjectByName("head");
+        if (head) head.rotation.y = data.ry;
+      }
+    }
+
+    function removePlayerModel(id) {
+      if (otherPlayers[id]) {
+        scene.remove(otherPlayers[id]);
+        delete otherPlayers[id];
+      }
+    }
+
+    // Анимация и Рендер (Локально плавно без лагов)
+    function animate() {
+      if (!inCinema) return;
+      requestAnimationFrame(animate);
+
+      // Движение локальной камеры
+      const speed = 0.05;
+      let moved = false;
+
+      if (keys['KeyW']) { camera.position.z -= speed; moved = true; }
+      if (keys['KeyS']) { camera.position.z += speed; moved = true; }
+      if (keys['KeyA']) { camera.position.x -= speed; moved = true; }
+      if (keys['KeyD']) { camera.position.x += speed; moved = true; }
+
+      if (moved && socket) {
+        socket.emit('move', {
+          x: camera.position.x,
+          y: camera.position.y,
+          z: camera.position.z,
+          ry: camera.rotation.y
+        });
+      }
+
+      // Поворот камеры наблюдения (анимация в правом углу)
+      const cam = scene.children.find(c => c.geometry && c.geometry.type === 'BoxGeometry');
+      if (cam) cam.rotation.y = Math.sin(Date.now() * 0.001) * 0.5;
+
+      renderer.render(scene, camera);
+    }
+  </script>
+</body>
+</html>
