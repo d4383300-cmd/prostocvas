@@ -40,7 +40,6 @@ let videoState = {
     startTime: Date.now()
 };
 
-// Функция поиска свободного места на основе РЕАЛЬНО активных игроков
 function getFreeSeatIndex() {
     const occupiedSeats = new Set(Object.values(players).map(p => p.seatIndex));
     for (let i = 0; i < MAX_SEATS; i++) {
@@ -48,7 +47,7 @@ function getFreeSeatIndex() {
             return i;
         }
     }
-    return -1; // Если реально заняты все 6
+    return -1;
 }
 
 io.on('connection', (socket) => {
