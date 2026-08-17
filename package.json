@@ -1,7 +1,7 @@
 {
   "name": "cinema-3d-bot",
-  "version": "3.0.0",
-  "description": "3D Cinema with Live Screenshots, NPCs, and Multiplatform Video Sync",
+  "version": "4.0.0",
+  "description": "3D Cinema WebApp with Real Players and NPC distribution",
   "main": "server.js",
   "scripts": {
     "start": "node server.js"
