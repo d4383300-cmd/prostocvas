@@ -16,7 +16,6 @@ scene.background = new THREE.Color(0x020204);
 const cssScene = new THREE.Scene();
 const camera = new THREE.PerspectiveCamera(65, window.innerWidth / window.innerHeight, 0.1, 50);
 
-// preserveDrawingBuffer позволяет делать скриншоты 3D-сцены
 const renderer = new THREE.WebGLRenderer({ antialias: true, preserveDrawingBuffer: true });
 renderer.setSize(window.innerWidth, window.innerHeight);
 document.getElementById('webgl').appendChild(renderer.domElement);
@@ -55,7 +54,13 @@ const topFrame = new THREE.Mesh(new THREE.BoxGeometry(8.2, 0.2, 0.1), frameMat);
 topFrame.position.set(0, 4.8, -4.9);
 scene.add(topFrame);
 
-// 3. Создание Ряда из 6 Кресел
+// 3. Создание 3D Экрана с текстурой превью (чтобы видно было на скриншоте)
+const screenMat = new THREE.MeshBasicMaterial({ color: 0xffffff });
+const screenMesh = new THREE.Mesh(new THREE.PlaneGeometry(8, 4.5), screenMat);
+screenMesh.position.set(0, 2.6, -4.9);
+scene.add(screenMesh);
+
+// 4. Создание Ряда из 6 Кресел
 const SEAT_POSITIONS_X = [-2.5, -1.5, -0.5, 0.5, 1.5, 2.5];
 const chairMat = new THREE.MeshStandardMaterial({ color: 0x5a0000 });
 const armMat = new THREE.MeshStandardMaterial({ color: 0x111111 });
@@ -85,7 +90,7 @@ SEAT_POSITIONS_X.forEach((posX) => {
     scene.add(chair);
 });
 
-// 4. CSS3D Экран
+// 5. CSS3D Экран (для реального воспроизведения)
 const iframe = document.createElement('iframe');
 iframe.style.width = '800px';
 iframe.style.height = '450px';
@@ -97,11 +102,22 @@ cssObject.position.set(0, 2.6, -4.89);
 cssObject.scale.set(8 / 800, 4.5 / 450, 1);
 cssScene.add(cssObject);
 
+const textureLoader = new THREE.TextureLoader();
+
 function updateVideoFrame(url, time) {
     let embedUrl = url;
+    let videoId = '';
+
     if (url.includes('youtube.com') || url.includes('youtu.be')) {
-        const id = url.split('v=')[1] || url.split('/').pop();
-        embedUrl = `https://www.youtube.com/embed/${id}?autoplay=1&start=${Math.floor(time)}`;
+        videoId = url.split('v=')[1] || url.split('/').pop();
+        embedUrl = `https://www.youtube.com/embed/${videoId}?autoplay=1&start=${Math.floor(time)}`;
+        
+        // Ставим обложку ролика на 3D-экран WebGL для скриншота
+        const thumbUrl = `https://img.youtube.com/vi/${videoId}/hqdefault.jpg`;
+        textureLoader.load(thumbUrl, (tex) => {
+            screenMat.map = tex;
+            screenMat.needsUpdate = true;
+        });
     } else if (url.includes('rutube.ru')) {
         const id = url.split('/').pop();
         embedUrl = `https://rutube.ru/play/embed/${id}`;
@@ -109,7 +125,7 @@ function updateVideoFrame(url, time) {
     iframe.src = embedUrl;
 }
 
-// 5. Персонажи и Игроки
+// 6. Персонажи и Игроки
 function createFaceTexture() {
     const canvas = document.createElement('canvas');
     canvas.width = 128; canvas.height = 128;
@@ -195,7 +211,7 @@ function updatePlayerLabel(group, message) {
     texture.needsUpdate = true;
 }
 
-// 6. Танцоры для сцены
+// 7. Танцоры для сцены
 let dancers = [];
 function createDancers() {
     clearDancers();
@@ -213,7 +229,7 @@ function clearDancers() {
     dancers = [];
 }
 
-// 7. Управление и Чат
+// 8. Управление
 let myId = null;
 let mySeatIndex = null;
 let remotePlayers = {};
@@ -302,7 +318,7 @@ function submitVideoUrl() {
     }
 }
 
-// 8. Сетевое взаимодействие
+// 9. Сетевое взаимодействие
 socket.emit('join', { nickname: myNickname });
 
 socket.on('fullRoom', (msg) => {
@@ -317,7 +333,6 @@ socket.on('init', (data) => {
     myId = data.id;
     mySeatIndex = data.seatIndex;
 
-    // Создаем модельку для СЕБЯ, чтобы мы сидели в кресле и были видны со стороны/на скриншоте
     if (!myMesh) {
         myMesh = createSeatedPlayer(myNickname, 0x2e7d32);
         myMesh.position.set(SEAT_POSITIONS_X[mySeatIndex], 0, 2.0);
@@ -364,28 +379,24 @@ socket.on('videoStateUpdate', (state) => {
     handleVideoState(state);
 });
 
-// Запрос скриншота от сервера для Telegram
 socket.on('requestScreenshot', () => {
     takeScreenshotAndSend();
 });
 
 function takeScreenshotAndSend() {
-    // Сохраняем текущую позицию камеры
     const oldPos = camera.position.clone();
     const oldRot = camera.rotation.clone();
 
-    // Перемещаем камеру НАЗАД для снимка всех зрителей
-    camera.position.set(0, 2.8, 5.0);
-    camera.lookAt(0, 1.2, -2.0);
+    // Камера для красивого кадра сзади
+    camera.position.set(0, 2.5, 4.8);
+    camera.lookAt(0, 2.2, -4.9);
 
     renderer.render(scene, camera);
     const dataUrl = renderer.domElement.toDataURL('image/png');
 
-    // Возвращаем камеру обратно в глаза
     camera.position.copy(oldPos);
     camera.rotation.copy(oldRot);
 
-    // Отправляем скриншот на сервер
     fetch('/api/screenshot', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -421,7 +432,7 @@ function addRemotePlayer(p) {
     remotePlayers[p.id] = { mesh };
 }
 
-// 9. Анимации и Цикл Рендера
+// 10. Анимации
 let clock = new THREE.Clock();
 
 function animate() {
@@ -429,7 +440,6 @@ function animate() {
 
     const time = clock.getElapsedTime();
 
-    // Анимация танцоров в режиме "стрим"
     if (isStreamMode && dancers.length > 0) {
         dancers.forEach((dancer, idx) => {
             dancer.position.y = Math.abs(Math.sin(time * 5 + idx)) * 0.3;
