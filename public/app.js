@@ -16,7 +16,8 @@ scene.background = new THREE.Color(0x020204);
 const cssScene = new THREE.Scene();
 const camera = new THREE.PerspectiveCamera(65, window.innerWidth / window.innerHeight, 0.1, 50);
 
-const renderer = new THREE.WebGLRenderer({ antialias: true });
+// preserveDrawingBuffer позволяет делать скриншоты 3D-сцены
+const renderer = new THREE.WebGLRenderer({ antialias: true, preserveDrawingBuffer: true });
 renderer.setSize(window.innerWidth, window.innerHeight);
 document.getElementById('webgl').appendChild(renderer.domElement);
 
@@ -108,7 +109,7 @@ function updateVideoFrame(url, time) {
     iframe.src = embedUrl;
 }
 
-// 5. Персонажи и Танцоры
+// 5. Персонажи и Игроки
 function createFaceTexture() {
     const canvas = document.createElement('canvas');
     canvas.width = 128; canvas.height = 128;
@@ -194,7 +195,7 @@ function updatePlayerLabel(group, message) {
     texture.needsUpdate = true;
 }
 
-// 6. Танцоры для режима СТРИМ
+// 6. Танцоры для сцены
 let dancers = [];
 function createDancers() {
     clearDancers();
@@ -212,10 +213,11 @@ function clearDancers() {
     dancers = [];
 }
 
-// 7. Управление и Чат (Адаптировано для Телефона)
+// 7. Управление и Чат
 let myId = null;
 let mySeatIndex = null;
 let remotePlayers = {};
+let myMesh = null;
 let yaw = 0, pitch = 0;
 let isStreamMode = false;
 
@@ -225,7 +227,7 @@ webglEl.addEventListener('click', () => {
 });
 
 document.addEventListener('mousemove', (e) => {
-    if (document.pointerLockElement === webglEl && !isStreamMode) {
+    if (document.pointerLockElement === webglEl) {
         yaw -= e.movementX * 0.002;
         pitch -= e.movementY * 0.002;
         pitch = Math.max(-Math.PI / 3, Math.min(Math.PI / 3, pitch));
@@ -242,7 +244,7 @@ document.addEventListener('touchstart', (e) => {
     }
 });
 document.addEventListener('touchmove', (e) => {
-    if (e.touches.length === 1 && !isStreamMode) {
+    if (e.touches.length === 1) {
         const dx = e.touches[0].clientX - touchStartX;
         const dy = e.touches[0].clientY - touchStartY;
         yaw -= dx * 0.004;
@@ -279,9 +281,7 @@ document.getElementById('btnVideo').onclick = () => {
 };
 
 chatInput.addEventListener('keydown', (e) => {
-    if (e.key === 'Enter') {
-        sendMessage();
-    }
+    if (e.key === 'Enter') sendMessage();
 });
 
 document.addEventListener('keydown', (e) => {
@@ -317,6 +317,13 @@ socket.on('init', (data) => {
     myId = data.id;
     mySeatIndex = data.seatIndex;
 
+    // Создаем модельку для СЕБЯ, чтобы мы сидели в кресле и были видны со стороны/на скриншоте
+    if (!myMesh) {
+        myMesh = createSeatedPlayer(myNickname, 0x2e7d32);
+        myMesh.position.set(SEAT_POSITIONS_X[mySeatIndex], 0, 2.0);
+        scene.add(myMesh);
+    }
+
     resetCameraPosition();
 
     for (let id in data.players) {
@@ -346,7 +353,7 @@ socket.on('chatMessage', (data) => {
     chatHistory.appendChild(msgEl);
     chatHistory.scrollTop = chatHistory.scrollHeight;
 
-    let model = remotePlayers[data.id]?.mesh;
+    let model = data.id === myId ? myMesh : remotePlayers[data.id]?.mesh;
     if (model) {
         updatePlayerLabel(model, data.text);
         setTimeout(() => updatePlayerLabel(model, ""), 4000);
@@ -357,6 +364,35 @@ socket.on('videoStateUpdate', (state) => {
     handleVideoState(state);
 });
 
+// Запрос скриншота от сервера для Telegram
+socket.on('requestScreenshot', () => {
+    takeScreenshotAndSend();
+});
+
+function takeScreenshotAndSend() {
+    // Сохраняем текущую позицию камеры
+    const oldPos = camera.position.clone();
+    const oldRot = camera.rotation.clone();
+
+    // Перемещаем камеру НАЗАД для снимка всех зрителей
+    camera.position.set(0, 2.8, 5.0);
+    camera.lookAt(0, 1.2, -2.0);
+
+    renderer.render(scene, camera);
+    const dataUrl = renderer.domElement.toDataURL('image/png');
+
+    // Возвращаем камеру обратно в глаза
+    camera.position.copy(oldPos);
+    camera.rotation.copy(oldRot);
+
+    // Отправляем скриншот на сервер
+    fetch('/api/screenshot', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ image: dataUrl })
+    }).catch(err => console.error(err));
+}
+
 function handleVideoState(state) {
     isStreamMode = !!state.isStreamMode;
     updateVideoFrame(state.url, state.currentTime);
@@ -365,7 +401,6 @@ function handleVideoState(state) {
         createDancers();
     } else {
         clearDancers();
-        resetCameraPosition();
     }
 }
 
@@ -400,13 +435,6 @@ function animate() {
             dancer.position.y = Math.abs(Math.sin(time * 5 + idx)) * 0.3;
             dancer.rotation.y = Math.sin(time * 3 + idx) * 0.5;
         });
-
-        // Плавная смена ракурсов камеры
-        const cameraAngle = time * 0.4;
-        camera.position.x = Math.sin(cameraAngle) * 4;
-        camera.position.z = Math.cos(cameraAngle) * 3 + 1;
-        camera.position.y = 1.8 + Math.sin(time * 0.8) * 0.4;
-        camera.lookAt(0, 0.8, 1.5);
     }
 
     renderer.render(scene, camera);
