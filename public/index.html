@@ -2,72 +2,89 @@
 <html lang="ru">
 <head>
   <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
-  <title>HQ 3D Telegram Office</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>HQ Telegram 3D Office</title>
   <style>
-    body { margin: 0; overflow: hidden; background: #0e1621; font-family: 'Segoe UI', Tahoma, sans-serif; user-select: none; }
-    #canvas-container { width: 100vw; height: 100vh; }
+    * { box-sizing: border-box; user-select: none; -webkit-user-select: none; }
+    body, html { margin: 0; padding: 0; width: 100%; height: 100%; overflow: hidden; background: #0f172a; font-family: system-ui, -apple-system, sans-serif; }
+    #canvas-container { width: 100vw; height: 100vh; display: block; }
     
-    /* Экран блокировки */
+    /* Экран входа */
     #blocker {
-      position: absolute; top: 0; left: 0; width: 100%; height: 100%;
-      background: rgba(14, 22, 33, 0.9); display: flex; flex-direction: column;
-      justify-content: center; align-items: center; color: #fff; z-index: 100;
-      cursor: pointer; text-align: center;
+      position: absolute; inset: 0; background: rgba(15, 23, 42, 0.95);
+      display: flex; flex-direction: column; justify-content: center; align-items: center;
+      color: #fff; z-index: 100; cursor: pointer; text-align: center; padding: 20px;
     }
-    #blocker h1 { font-size: 32px; color: #2AABEE; margin-bottom: 15px; text-shadow: 0 0 10px rgba(42,171,238,0.5); }
-    #blocker p { font-size: 16px; line-height: 1.6; color: #7f91a4; }
+    #blocker h1 { font-size: 2.2rem; color: #38bdf8; margin-bottom: 10px; text-shadow: 0 0 20px rgba(56,189,248,0.4); }
+    #blocker p { font-size: 1rem; color: #94a3b8; line-height: 1.6; max-width: 500px; }
+    .bind-badge { background: #1e293b; color: #38bdf8; padding: 2px 8px; border-radius: 4px; border: 1px solid #334155; font-family: monospace; }
 
-    /* Панель ввода сообщений */
+    /* Окно чата */
     #chat-modal {
-      position: absolute; bottom: 30px; left: 50%; transform: translateX(-50%);
-      display: none; background: #17212b; padding: 12px; border-radius: 12px;
-      box-shadow: 0 8px 32px rgba(0,0,0,0.6); z-index: 50; width: 360px;
-      border: 1px solid #2b5278;
+      position: absolute; bottom: 25px; left: 50%; transform: translateX(-50%);
+      display: none; background: #1e293b; padding: 10px; border-radius: 12px;
+      box-shadow: 0 10px 25px -5px rgba(0,0,0,0.5); z-index: 50; width: 90%; max-width: 400px;
+      border: 1px solid #334155;
     }
     #chat-modal-inner { display: flex; gap: 8px; }
     #msg-input {
-      flex: 1; padding: 10px 14px; border: 1px solid #2b5278; background: #0e1621;
+      flex: 1; padding: 12px; border: 1px solid #334155; background: #0f172a;
       color: #fff; border-radius: 8px; outline: none; font-size: 14px;
     }
     #send-btn {
-      padding: 10px 18px; border: none; background: #2AABEE; color: #fff;
-      font-weight: bold; border-radius: 8px; cursor: pointer; transition: 0.2s;
+      padding: 12px 18px; border: none; background: #0284c7; color: #fff;
+      font-weight: bold; border-radius: 8px; cursor: pointer;
     }
-    #send-btn:hover { background: #229ed9; }
 
-    /* Кнопки управления */
-    .btn-action {
-      position: absolute; right: 25px; z-index: 40; padding: 12px 22px;
-      background: #17212b; color: #fff; border: 1px solid #2b5278; border-radius: 10px;
-      cursor: pointer; font-weight: bold; box-shadow: 0 4px 12px rgba(0,0,0,0.3); transition: 0.2s;
+    /* Мобильные кнопки & Индикатор управления ПК */
+    .controls-overlay {
+      position: absolute; top: 15px; left: 15px; color: #94a3b8; font-size: 12px;
+      z-index: 40; background: rgba(15, 23, 42, 0.6); padding: 10px; border-radius: 8px; pointer-events: none;
     }
-    .btn-action:hover { background: #2AABEE; border-color: #2AABEE; }
-    #smoke-btn { bottom: 85px; }
-    #selfie-btn { bottom: 25px; }
-    
+
+    .mobile-btn-group {
+      position: absolute; right: 15px; bottom: 20px; display: flex; flex-direction: column; gap: 10px; z-index: 40;
+    }
+    .btn-action {
+      padding: 12px 18px; background: #1e293b; color: #fff; border: 1px solid #38bdf8;
+      border-radius: 10px; font-weight: bold; font-size: 14px; cursor: pointer; box-shadow: 0 4px 12px rgba(0,0,0,0.3);
+    }
+
     #crosshair {
       position: absolute; top: 50%; left: 50%; width: 4px; height: 4px;
-      background: #2AABEE; border-radius: 50%; transform: translate(-50%, -50%);
-      pointer-events: none; z-index: 30; box-shadow: 0 0 8px #2AABEE;
+      background: #38bdf8; border-radius: 50%; transform: translate(-50%, -50%);
+      pointer-events: none; z-index: 30; box-shadow: 0 0 6px #38bdf8;
     }
   </style>
 </head>
 <body>
 
   <div id="blocker">
-    <h1>ОФИСНЫЙ ЧАТ 3D</h1>
-    <p>Кликните по экрану, чтобы сесть за стол<br><strong>Движение мыши:</strong> Осмотреться<br><strong>Клик по монитору:</strong> Написать сообщение в Telegram<br><strong>ESC:</strong> Освободить курсор</p>
+    <h1>ОФИСНЫЙ ТЕЛЕГРАМ 3D</h1>
+    <p>Кликни в любой точке, чтобы занять свое место</p>
+    <br>
+    <p><strong>Горячие клавиши (ПК):</strong><br>
+    <span class="bind-badge">E</span> или <span class="bind-badge">Enter</span> — Чат в ТГ<br>
+    <span class="bind-badge">F</span> или <span class="bind-badge">C</span> — Покурить сигарету<br>
+    <span class="bind-badge">X</span> или <span class="bind-badge">Space</span> — Селфи в ТГ группа
+    </p>
   </div>
 
   <div id="crosshair"></div>
 
-  <button id="smoke-btn" class="btn-action">🚬 Перекур</button>
-  <button id="selfie-btn" class="btn-action">📸 Селфи в ТГ</button>
+  <div class="controls-overlay" id="pc-hints">
+    [E] Написать в ТГ | [F] Курить | [X] Селфи
+  </div>
+
+  <div class="mobile-btn-group">
+    <button id="chat-btn" class="btn-action">💬 Чат [E]</button>
+    <button id="smoke-btn" class="btn-action">🚬 Курить [F]</button>
+    <button id="selfie-btn" class="btn-action">📸 Селфи [X]</button>
+  </div>
 
   <div id="chat-modal">
     <div id="chat-modal-inner">
-      <input type="text" id="msg-input" placeholder="Введите сообщение в ТГ..." maxlength="80">
+      <input type="text" id="msg-input" placeholder="Сообщение в Telegram..." maxlength="80">
       <button id="send-btn">ОТПРАВИТЬ</button>
     </div>
   </div>
@@ -86,7 +103,10 @@
     const msgInput = document.getElementById('msg-input');
     let isLocked = false;
 
-    blocker.addEventListener('click', () => { document.body.requestPointerLock(); });
+    // ЗАХВАТ КУРСОРА С ПРОВЕРКОЙ
+    blocker.addEventListener('click', () => {
+      document.body.requestPointerLock();
+    });
 
     document.addEventListener('pointerlockchange', () => {
       if (document.pointerLockElement === document.body) {
@@ -98,10 +118,15 @@
       }
     });
 
-    // THREE.JS ИНИЦИАЛИЗАЦИЯ
+    socket.on('officeFull', (msg) => {
+      alert(msg);
+      blocker.innerHTML = `<h1>ОФИС ПЕРЕПОЛНЕН (4/4)</h1><p>Все места заняты. Попробуйте позже.</p>`;
+    });
+
+    // THREE.JS СЦЕНА
     const scene = new THREE.Scene();
-    scene.background = new THREE.Color(0x0e1621);
-    scene.fog = new THREE.FogExp2(0x0e1621, 0.025);
+    scene.background = new THREE.Color(0x0f172a);
+    scene.fog = new THREE.FogExp2(0x0f172a, 0.03);
 
     const camera = new THREE.PerspectiveCamera(60, window.innerWidth / window.innerHeight, 0.1, 1000);
     const renderer = new THREE.WebGLRenderer({ antialias: true, preserveDrawingBuffer: true });
@@ -110,58 +135,55 @@
     renderer.shadowMap.type = THREE.PCFSoftShadowMap;
     document.getElementById('canvas-container').appendChild(renderer.domElement);
 
-    // СВЕТ
-    const ambientLight = new THREE.AmbientLight(0xffffff, 0.5);
+    // ОСВЕЩЕНИЕ
+    const ambientLight = new THREE.AmbientLight(0xffffff, 0.6);
     scene.add(ambientLight);
 
-    const ceilingLight = new THREE.PointLight(0xffeedd, 1, 15);
-    ceilingLight.position.set(0, 3.8, 0);
-    ceilingLight.castShadow = true;
-    scene.add(ceilingLight);
+    const mainLight = new THREE.PointLight(0xfef08a, 1.2, 18);
+    mainLight.position.set(0, 3.5, 0);
+    mainLight.castShadow = true;
+    scene.add(mainLight);
 
-    // ПРОЦЕДУРНАЯ ГЕНЕРАЦИЯ ТЕКСТУРЫ ДЕРЕВАДЛЯ СТОЛОВ
+    // ПРОЦЕДУРНЫЕ ТЕКСТУРЫ
     function createWoodTexture() {
       const canvas = document.createElement('canvas');
-      canvas.width = 512; canvas.height = 512;
+      canvas.width = 256; canvas.height = 256;
       const ctx = canvas.getContext('2d');
-      ctx.fillStyle = '#4a2e18'; ctx.fillRect(0, 0, 512, 512);
-      ctx.fillStyle = '#3b2310';
-      for (let i = 0; i < 500; i++) {
-        ctx.fillRect(Math.random() * 512, Math.random() * 512, Math.random() * 200, 2);
-      }
+      ctx.fillStyle = '#3f2314'; ctx.fillRect(0, 0, 256, 256);
+      ctx.fillStyle = '#2b160a';
+      for (let i = 0; i < 200; i++) ctx.fillRect(Math.random() * 256, Math.random() * 256, Math.random() * 100, 1);
       return new THREE.CanvasTexture(canvas);
     }
-    const woodTexture = createWoodTexture();
 
-    // ПОМЕЩЕНИЕ
+    // ОФИСНАЯ КОМНАТА
     const room = new THREE.Group();
     // Пол
-    const floorGeo = new THREE.PlaneGeometry(14, 14);
-    const floorMat = new THREE.MeshStandardMaterial({ color: 0x1f2933, roughness: 0.8 });
+    const floorGeo = new THREE.PlaneGeometry(12, 12);
+    const floorMat = new THREE.MeshStandardMaterial({ color: 0x1e293b, roughness: 0.9 });
     const floor = new THREE.Mesh(floorGeo, floorMat);
     floor.rotation.x = -Math.PI / 2;
     floor.receiveShadow = true;
     room.add(floor);
 
     // Стены
-    const wallMat = new THREE.MeshStandardMaterial({ color: 0x242f3d, roughness: 0.9 });
-    const backWall = new THREE.Mesh(new THREE.PlaneGeometry(14, 4), wallMat);
-    backWall.position.set(0, 2, -7);
+    const wallMat = new THREE.MeshStandardMaterial({ color: 0x334155, roughness: 0.8 });
+    const backWall = new THREE.Mesh(new THREE.PlaneGeometry(12, 4), wallMat);
+    backWall.position.set(0, 2, -6);
     room.add(backWall);
 
-    const leftWall = new THREE.Mesh(new THREE.PlaneGeometry(14, 4), wallMat);
-    leftWall.position.set(-7, 2, 0);
+    const leftWall = new THREE.Mesh(new THREE.PlaneGeometry(12, 4), wallMat);
+    leftWall.position.set(-6, 2, 0);
     leftWall.rotation.y = Math.PI / 2;
     room.add(leftWall);
 
     const rightWall = leftWall.clone();
-    rightWall.position.set(7, 2, 0);
+    rightWall.position.set(6, 2, 0);
     rightWall.rotation.y = -Math.PI / 2;
     room.add(rightWall);
 
     scene.add(room);
 
-    // РЕНДЕР ИНТЕРФЕЙСА ТЕЛЕГРАМА НА МОНИТОРЕ
+    // РЕНДЕР ИНТЕРФЕЙСА ТЕЛЕГРАМ НА МОНИТОРЕ
     const tgCanvas = document.createElement('canvas');
     tgCanvas.width = 512; tgCanvas.height = 384;
     const tgCtx = tgCanvas.getContext('2d');
@@ -170,157 +192,140 @@
     let chatMessages = [];
 
     function drawTelegramUI() {
-      // Задник
-      tgCtx.fillStyle = '#0e1621'; tgCtx.fillRect(0, 0, 512, 384);
-      // Шапка
-      tgCtx.fillStyle = '#17212b'; tgCtx.fillRect(0, 0, 512, 50);
-      tgCtx.fillStyle = '#ffffff'; tgCtx.font = 'bold 16px sans-serif';
-      tgCtx.fillText('Чат: -1004349256495', 20, 31);
+      tgCtx.fillStyle = '#0f172a'; tgCtx.fillRect(0, 0, 512, 384);
+      tgCtx.fillStyle = '#1e293b'; tgCtx.fillRect(0, 0, 512, 48);
+      tgCtx.fillStyle = '#38bdf8'; tgCtx.font = 'bold 16px sans-serif';
+      tgCtx.fillText('Telegram Chat: -1004349256495', 18, 30);
 
-      // Сообщения
-      let startY = 70;
+      let startY = 65;
       chatMessages.slice(-6).forEach(m => {
-        tgCtx.fillStyle = '#182533';
+        tgCtx.fillStyle = '#1e293b';
         tgCtx.beginPath();
-        tgCtx.roundRect(15, startY, 480, 40, 8);
+        tgCtx.roundRect(12, startY, 488, 42, 8);
         tgCtx.fill();
 
-        // Имя и время
-        tgCtx.fillStyle = '#2AABEE'; tgCtx.font = 'bold 13px sans-serif';
-        tgCtx.fillText(m.user, 25, startY + 18);
+        tgCtx.fillStyle = '#38bdf8'; tgCtx.font = 'bold 13px sans-serif';
+        tgCtx.fillText(m.user, 22, startY + 18);
 
-        tgCtx.fillStyle = '#7f91a4'; tgCtx.font = '10px sans-serif';
+        tgCtx.fillStyle = '#64748b'; tgCtx.font = '10px sans-serif';
         tgCtx.fillText(m.time || '', 440, startY + 18);
 
-        // Текст
-        tgCtx.fillStyle = '#ffffff'; tgCtx.font = '13px sans-serif';
-        tgCtx.fillText(m.text, 25, startY + 33);
+        tgCtx.fillStyle = '#f8fafc'; tgCtx.font = '13px sans-serif';
+        tgCtx.fillText(m.text, 22, startY + 34);
 
-        startY += 48;
+        startY += 50;
       });
       tgTexture.needsUpdate = true;
     }
 
-    // 3D МОДЕЛИ ЧЕЛОВЕКА
+    // 3D МОДЕЛИ СУБЪЕКТОВ И СТОЛОВ
+    const woodTex = createWoodTexture();
+
     function createHumanModel(app) {
       const group = new THREE.Group();
 
-      const bodyGeo = new THREE.BoxGeometry(0.5, 0.65, 0.3);
       const bodyMat = new THREE.MeshStandardMaterial({ color: app.shirtColor });
-      const body = new THREE.Mesh(bodyGeo, bodyMat);
+      const body = new THREE.Mesh(new THREE.BoxGeometry(0.48, 0.6, 0.28), bodyMat);
       body.position.y = 0.8;
       group.add(body);
 
-      const headGeo = new THREE.BoxGeometry(0.28, 0.28, 0.28);
       const headMat = new THREE.MeshStandardMaterial({ color: app.skinColor });
-      const head = new THREE.Mesh(headGeo, headMat);
-      head.position.y = 1.3;
+      const head = new THREE.Mesh(new THREE.BoxGeometry(0.26, 0.26, 0.26), headMat);
+      head.position.y = 1.28;
       group.add(head);
 
-      const hairGeo = new THREE.BoxGeometry(0.3, 0.08, 0.3);
       const hairMat = new THREE.MeshStandardMaterial({ color: app.hairColor });
-      const hair = new THREE.Mesh(hairGeo, hairMat);
-      hair.position.set(0, 1.45, 0);
+      const hair = new THREE.Mesh(new THREE.BoxGeometry(0.28, 0.08, 0.28), hairMat);
+      hair.position.set(0, 1.42, 0);
       group.add(hair);
 
       if (app.hasMustache) {
-        const stacheGeo = new THREE.BoxGeometry(0.14, 0.04, 0.04);
-        const stache = new THREE.Mesh(stacheGeo, hairMat);
-        stache.position.set(0, 1.23, 0.15);
+        const stache = new THREE.Mesh(new THREE.BoxGeometry(0.12, 0.04, 0.04), hairMat);
+        stache.position.set(0, 1.2, 0.14);
         group.add(stache);
       }
 
-      const armGeo = new THREE.BoxGeometry(0.1, 0.45, 0.1);
-      const leftArm = new THREE.Mesh(armGeo, bodyMat);
-      leftArm.position.set(-0.32, 0.75, 0.1);
+      const leftArm = new THREE.Mesh(new THREE.BoxGeometry(0.1, 0.4, 0.1), bodyMat);
+      leftArm.position.set(-0.3, 0.75, 0.1);
       leftArm.rotation.x = -Math.PI / 3;
 
       const rightArm = leftArm.clone();
-      rightArm.position.x = 0.32;
+      rightArm.position.x = 0.3;
 
       group.add(leftArm); group.add(rightArm);
       return { mesh: group, leftArm, rightArm };
     }
 
-    // 3D МОДЕЛЬ РАБОЧЕГО МЕСТА
     function createDeskSetup(deskData, ownerName) {
       const group = new THREE.Group();
       group.position.set(deskData.x, 0, deskData.z);
       group.rotation.y = deskData.rotY;
 
-      // Деревянный стол
-      const deskGeo = new THREE.BoxGeometry(1.6, 0.75, 0.9);
-      const deskMat = new THREE.MeshStandardMaterial({ map: woodTexture, roughness: 0.5 });
-      const desk = new THREE.Mesh(deskGeo, deskMat);
+      // Стол
+      const desk = new THREE.Mesh(new THREE.BoxGeometry(1.5, 0.75, 0.85), new THREE.MeshStandardMaterial({ map: woodTex }));
       desk.position.y = 0.375;
       desk.castShadow = true; desk.receiveShadow = true;
       group.add(desk);
 
-      // Офисное кресло
-      const chairGroup = new THREE.Group();
-      const seatGeo = new THREE.BoxGeometry(0.5, 0.1, 0.5);
-      const chairMat = new THREE.MeshStandardMaterial({ color: 0x111111 });
-      const seat = new THREE.Mesh(seatGeo, chairMat);
-      seat.position.set(0, 0.45, 0.5);
-      chairGroup.add(seat);
+      // Кресло
+      const chairMat = new THREE.MeshStandardMaterial({ color: 0x0f172a });
+      const seat = new THREE.Mesh(new THREE.BoxGeometry(0.5, 0.08, 0.5), chairMat);
+      seat.position.set(0, 0.42, 0.5);
+      group.add(seat);
+      const back = new THREE.Mesh(new THREE.BoxGeometry(0.5, 0.55, 0.08), chairMat);
+      back.position.set(0, 0.7, 0.7);
+      group.add(back);
 
-      const backGeo = new THREE.BoxGeometry(0.5, 0.6, 0.1);
-      const back = new THREE.Mesh(backGeo, chairMat);
-      back.position.set(0, 0.75, 0.7);
-      chairGroup.add(back);
-      group.add(chairGroup);
-
-      // Монитор ЭЛТ
-      const monBodyGeo = new THREE.BoxGeometry(0.55, 0.42, 0.4);
-      const monMat = new THREE.MeshStandardMaterial({ color: 0xd1c7bd, roughness: 0.4 });
-      const monBody = new THREE.Mesh(monBodyGeo, monMat);
-      monBody.position.set(0, 0.96, -0.1);
+      // ЭЛТ Монитор
+      const monBody = new THREE.Mesh(new THREE.BoxGeometry(0.52, 0.4, 0.38), new THREE.MeshStandardMaterial({ color: 0xcbd5e1 }));
+      monBody.position.set(0, 0.95, -0.1);
       monBody.castShadow = true;
       group.add(monBody);
 
-      // Экран монитора
-      const screenGeo = new THREE.PlaneGeometry(0.48, 0.34);
-      const screenMat = new THREE.MeshBasicMaterial({ map: tgTexture });
-      const screen = new THREE.Mesh(screenGeo, screenMat);
-      screen.position.set(0, 0.96, 0.101);
+      // Экран
+      const screen = new THREE.Mesh(new THREE.PlaneGeometry(0.45, 0.32), new THREE.MeshBasicMaterial({ map: tgTexture }));
+      screen.position.set(0, 0.95, 0.091);
       group.add(screen);
 
-      // Клавиатура
-      const kbGeo = new THREE.BoxGeometry(0.4, 0.02, 0.15);
-      const kbMat = new THREE.MeshStandardMaterial({ color: 0xcccccc });
-      const kb = new THREE.Mesh(kbGeo, kbMat);
-      kb.position.set(0, 0.76, 0.22);
+      // Клавиатура и мышь
+      const kbMat = new THREE.MeshStandardMaterial({ color: 0x94a3b8 });
+      const kb = new THREE.Mesh(new THREE.BoxGeometry(0.38, 0.02, 0.14), kbMat);
+      kb.position.set(0, 0.76, 0.2);
       group.add(kb);
 
-      // Мышка
-      const mouseGeo = new THREE.BoxGeometry(0.08, 0.03, 0.12);
-      const mouseMesh = new THREE.Mesh(mouseGeo, kbMat);
-      mouseMesh.position.set(0.3, 0.76, 0.22);
+      const mouseMesh = new THREE.Mesh(new THREE.BoxGeometry(0.07, 0.03, 0.1), kbMat);
+      mouseMesh.position.set(0.28, 0.76, 0.2);
       group.add(mouseMesh);
 
-      // Листочек с именем
+      // Сигарета на столе
+      const cigGeo = new THREE.CylinderGeometry(0.008, 0.008, 0.08);
+      const cigMat = new THREE.MeshBasicMaterial({ color: 0xffffff });
+      const cig = new THREE.Mesh(cigGeo, cigMat);
+      cig.rotation.z = Math.PI / 2;
+      cig.position.set(-0.25, 0.76, 0.15);
+      group.add(cig);
+
+      // Табличка с именем
       const paperCanvas = document.createElement('canvas');
       paperCanvas.width = 256; paperCanvas.height = 128;
       const pCtx = paperCanvas.getContext('2d');
       pCtx.fillStyle = '#ffffff'; pCtx.fillRect(0, 0, 256, 128);
-      pCtx.fillStyle = '#000000'; pCtx.font = 'bold 22px sans-serif';
-      pCtx.fillText("Сотрудник:", 15, 40);
-      pCtx.fillStyle = '#2AABEE'; pCtx.font = 'bold 30px sans-serif';
-      pCtx.fillText(ownerName, 15, 85);
+      pCtx.fillStyle = '#0f172a'; pCtx.font = 'bold 20px sans-serif';
+      pCtx.fillText("Сотрудник:", 15, 35);
+      pCtx.fillStyle = '#0284c7'; pCtx.font = 'bold 28px sans-serif';
+      pCtx.fillText(ownerName, 15, 80);
 
       const paperTex = new THREE.CanvasTexture(paperCanvas);
-      const paperGeo = new THREE.PlaneGeometry(0.2, 0.12);
-      const paperMat = new THREE.MeshBasicMaterial({ map: paperTex });
-      const paper = new THREE.Mesh(paperGeo, paperMat);
+      const paper = new THREE.Mesh(new THREE.PlaneGeometry(0.18, 0.1), new THREE.MeshBasicMaterial({ map: paperTex }));
       paper.rotation.x = -Math.PI / 2;
-      paper.position.set(-0.5, 0.76, 0.22);
+      paper.position.set(-0.45, 0.76, 0.2);
       group.add(paper);
 
       scene.add(group);
       return { group, screen };
     }
 
-    // СОКЕТЫ И ТОЧНАЯ УСТАНОВКА КАМЕРЫ (СПАВН)
+    // ИНИЦИАЛИЗАЦИЯ И ТОЧНЫЙ СПАВН
     let myScreenMesh = null;
 
     socket.on('init', (data) => {
@@ -329,23 +334,20 @@
       chatMessages = data.chatHistory || [];
       drawTelegramUI();
 
-      // ИДЕАЛЬНЫЙ СПАВН: Камера строго на уровне глаз сидящего за стулом
+      // МАТЕМАТИЧЕСКИ ТОЧНЫЙ СПАВН КАМЕРЫ НА КРЕСЛЕ
       const d = myData.desk;
       const rotY = d.rotY;
 
-      // Вычисляем положение головы игрока за стулом
       const camX = d.x - Math.sin(rotY) * 0.5;
       const camZ = d.z - Math.cos(rotY) * 0.5;
-      const camY = 1.15; // Высота глаз на стуле
+      const camY = 1.15; // Точная высота взгляда сидячего человека
 
       camera.position.set(camX, camY, camZ);
       
-      // Направляем взгляд ровно на монитор
       lon = rotY * (180 / Math.PI);
       lat = 0;
       updateCameraRotation();
 
-      // Отрисовка всех мест
       Object.values(data.players).forEach(p => {
         const deskObj = createDeskSetup(p.desk, p.name);
         if (p.id === myId) {
@@ -385,7 +387,7 @@
       drawTelegramUI();
     });
 
-    // УПРАВЛЕНИЕ КАМЕРОЙ
+    // УПРАВЛЕНИЕ КАМЕРОЙ (ПК + Мобильные Тачи)
     let lon = 0, lat = 0;
 
     function updateCameraRotation() {
@@ -399,6 +401,7 @@
       camera.lookAt(target);
     }
 
+    // Движение мыши для ПК
     document.addEventListener('mousemove', (e) => {
       if (!isLocked) return;
       lon -= e.movementX * 0.15;
@@ -407,27 +410,37 @@
       updateCameraRotation();
     });
 
-    // КЛИК ПО ЭКРАНУ МОНИТОРА
-    const raycaster = new THREE.Raycaster();
-    window.addEventListener('click', () => {
-      if (!isLocked || !myScreenMesh) return;
-
-      raycaster.setFromCamera(new THREE.Vector2(0, 0), camera);
-      const intersects = raycaster.intersectObject(myScreenMesh);
-
-      if (intersects.length > 0) {
-        document.exitPointerLock();
-        chatModal.style.display = 'block';
-        msgInput.focus();
-        socket.emit('typingStatus', true);
-      }
+    // Тач-контроль для телефонов
+    let touchStartX = 0, touchStartY = 0;
+    document.addEventListener('touchstart', (e) => {
+      if (e.target.tagName === 'BUTTON' || e.target.tagName === 'INPUT') return;
+      touchStartX = e.touches[0].clientX;
+      touchStartY = e.touches[0].clientY;
     });
 
-    // ЧАТ ВНУТРИ ИГРЫ
-    document.getElementById('send-btn').onclick = sendMessage;
-    msgInput.addEventListener('keydown', (e) => {
-      if (e.key === 'Enter') sendMessage();
+    document.addEventListener('touchmove', (e) => {
+      if (e.target.tagName === 'BUTTON' || e.target.tagName === 'INPUT') return;
+      const deltaX = e.touches[0].clientX - touchStartX;
+      const deltaY = e.touches[0].clientY - touchStartY;
+
+      lon -= deltaX * 0.2;
+      lat += deltaY * 0.2;
+      lat = Math.max(-60, Math.min(60, lat));
+
+      touchStartX = e.touches[0].clientX;
+      touchStartY = e.touches[0].clientY;
+
+      updateCameraRotation();
     });
+
+    // ФУНКЦИИ И ДЕЙСТВИЯ
+    function openChat() {
+      if (chatModal.style.display === 'block') return;
+      if (isLocked) document.exitPointerLock();
+      chatModal.style.display = 'block';
+      msgInput.focus();
+      socket.emit('typingStatus', true);
+    }
 
     function sendMessage() {
       if (msgInput.value.trim() !== '') {
@@ -435,44 +448,67 @@
         msgInput.value = '';
         chatModal.style.display = 'none';
         socket.emit('typingStatus', false);
-        document.body.requestPointerLock();
+        if (!('ontouchstart' in window)) document.body.requestPointerLock();
       }
     }
 
-    // АНИМАЦИЯ КУРЕНИЯ
     let isSmoking = false;
-    document.getElementById('smoke-btn').onclick = () => {
+    function smokeCigarette() {
       if (isSmoking) return;
       isSmoking = true;
       let time = 0;
       const initialY = camera.position.y;
       const smokeInt = setInterval(() => {
         time += 0.05;
-        camera.position.y = initialY + Math.sin(time * 5) * 0.05;
+        camera.position.y = initialY + Math.sin(time * 5) * 0.04;
         if (time > 3) {
           clearInterval(smokeInt);
           camera.position.y = initialY;
           isSmoking = false;
         }
       }, 30);
-    };
+    }
 
-    // СЕЛФИ
-    document.getElementById('selfie-btn').onclick = () => {
+    function takeSelfie() {
       renderer.render(scene, camera);
       const imgData = renderer.domElement.toDataURL('image/png');
       socket.emit('sendSelfie', { name: myData.name, image: imgData });
-      alert('Селфи успешно отправлено в Telegram-группу!');
-    };
+      alert('📸 Селфи отправлено в Telegram!');
+    }
 
-    // ГЛАВНЫЙ ЦИКЛ РЕНДЕРА
+    // БИНДЫ КЛАВИШ (ПК)
+    window.addEventListener('keydown', (e) => {
+      if (chatModal.style.display === 'block') {
+        if (e.key === 'Enter') sendMessage();
+        return;
+      }
+
+      const key = e.key.toLowerCase();
+      if (key === 'e' || key === 'enter') { openChat(); e.preventDefault(); }
+      if (key === 'f' || key === 'c') { smokeCigarette(); }
+      if (key === 'x' || key === ' ') { takeSelfie(); e.preventDefault(); }
+    });
+
+    // КЛИКИ ПО КНОПКАМ И ЭКРАНУ
+    document.getElementById('chat-btn').onclick = openChat;
+    document.getElementById('send-btn').onclick = sendMessage;
+    document.getElementById('smoke-btn').onclick = smokeCigarette;
+    document.getElementById('selfie-btn').onclick = takeSelfie;
+
+    const raycaster = new THREE.Raycaster();
+    window.addEventListener('click', (e) => {
+      if (!isLocked || !myScreenMesh || e.target.tagName === 'BUTTON') return;
+      raycaster.setFromCamera(new THREE.Vector2(0, 0), camera);
+      if (raycaster.intersectObject(myScreenMesh).length > 0) openChat();
+    });
+
+    // РЕНДЕР ЦИКЛ
     let clock = new THREE.Clock();
 
     function animate() {
       requestAnimationFrame(animate);
       const time = clock.getElapsedTime();
 
-      // Анимация печатания у коллег
       Object.values(otherPlayers).forEach(p => {
         if (p.model) {
           if (p.isTyping) {
