@@ -1,7 +1,7 @@
 {
   "name": "proslushka-chat",
-  "version": "1.0.0",
-  "description": "Интерактивный чат-прослушка с интеграцией Telegram и WebRTC",
+  "version": "2.0.0",
+  "description": "Интерактивный чат Прослушка с Windows Vista стилем и WebRTC",
   "main": "server.js",
   "scripts": {
     "start": "node server.js"
