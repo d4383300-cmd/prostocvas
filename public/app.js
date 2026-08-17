@@ -5,9 +5,7 @@ let inCall = false;
 let mySiteId = null;
 let myUsername = '';
 
-const rtcConfig = {
-  iceServers: [{ urls: 'stun:stun.l.google.com:19302' }]
-};
+const rtcConfig = { iceServers: [{ urls: 'stun:stun.l.google.com:19302' }] };
 
 window.addEventListener('DOMContentLoaded', () => {
   setTimeout(() => {
@@ -61,20 +59,22 @@ function handleServerMessage(data) {
     case 'AUTH_CODE':
       const box = document.getElementById('auth-link-box');
       box.classList.remove('hidden');
-      box.innerHTML = `<p style="margin-top:10px;">Перейдите в бота:</p><a href="https://t.me/xurestbot_bot?start=${data.code}" target="_blank" style="color:#ffd700;">Открыть Telegram Бот</a>`;
+      box.innerHTML = `<p style="margin-top:10px;">Перейдите в бота:</p><a href="https://t.me/xurestbot_bot?start=${data.code}" target="_blank" style="color:#ffd700;">Открыть Бот</a>`;
       break;
 
     case 'AUTH_SUCCESS':
       alert('Успешно привязано к Telegram!');
-      document.getElementById('profile-balance').innerText = data.user.balance;
-      if (data.user.isAdmin) {
-        document.getElementById('profile-admin-status').innerText = '👑 Администратор';
-      }
+      updateUserData(data.user);
       break;
 
     case 'CASINO_RESULT':
-      document.getElementById('casino-result').innerHTML = `Выпало: <strong>${data.roll}</strong>. ${data.win ? '🎉 Выиграли!' : '🪦 Проиграли.'}`;
+      document.getElementById('casino-result').innerHTML = `Выпало: <strong>${data.roll}</strong>. ${data.win ? '🎉 Выиграли!' : '🪦 Проигрыш.'}`;
       updateBalance(data.newBalance);
+      break;
+
+    case 'BUY_SUCCESS':
+      alert('Покупка совершена успешно!');
+      updateUserData(data.user);
       break;
 
     case 'WEBRTC_OFFER':
@@ -82,16 +82,19 @@ function handleServerMessage(data) {
       break;
 
     case 'WEBRTC_ANSWER':
-      if (peerConnection) {
-        peerConnection.setRemoteDescription(new RTCSessionDescription(data.answer));
-      }
+      if (peerConnection) peerConnection.setRemoteDescription(new RTCSessionDescription(data.answer));
       break;
 
     case 'WEBRTC_ICE':
-      if (peerConnection) {
-        peerConnection.addIceCandidate(new RTCIceCandidate(data.candidate));
-      }
+      if (peerConnection) peerConnection.addIceCandidate(new RTCIceCandidate(data.candidate));
       break;
+  }
+}
+
+function updateUserData(user) {
+  updateBalance(user.balance);
+  if (user.is_admin === 1) {
+    document.getElementById('profile-admin-status').innerText = '👑 Администратор';
   }
 }
 
@@ -175,7 +178,37 @@ function updateCallCount(count) {
   document.getElementById('call-count-val').innerText = count;
 }
 
-// --- Управление WebRTC Звонком ---
+// --- Хуютуб Видеоплеер ---
+function loadVideo() {
+  const url = document.getElementById('video-url-input').value.trim();
+  const container = document.getElementById('video-embed-container');
+  let embedUrl = '';
+
+  if (url.includes('youtube.com') || url.includes('youtu.be')) {
+    const regExp = /^.*(youtu.be\/|v\/|u\/\w\/|embed\/|watch\?v=|\&v=)([^#\&\?]*).*/;
+    const match = url.match(regExp);
+    if (match && match[2].length === 11) {
+      embedUrl = `https://www.youtube.com/embed/${match[2]}?autoplay=1`;
+    }
+  } else if (url.includes('rutube.ru')) {
+    const parts = url.split('/video/');
+    if (parts[1]) {
+      const id = parts[1].split('/')[0];
+      embedUrl = `https://rutube.ru/play/embed/${id}`;
+    }
+  } else if (url.includes('vk.com') || url.includes('vkvideo.ru')) {
+    embedUrl = url;
+  }
+
+  if (embedUrl) {
+    container.classList.remove('hidden');
+    container.innerHTML = `<iframe src="${embedUrl}" width="100%" height="250" frameborder="0" allow="autoplay; encrypted-media; fullscreen" allowfullscreen style="border-radius:6px;"></iframe>`;
+  } else {
+    alert('Введите правильную ссылку на YouTube, Rutube или VK Video!');
+  }
+}
+
+// WebRTC Звонки
 async function toggleCall() {
   if (!inCall) {
     try {
@@ -189,7 +222,7 @@ async function toggleCall() {
       await peerConnection.setLocalDescription(offer);
       ws.send(JSON.stringify({ type: 'WEBRTC_OFFER', offer }));
     } catch (e) {
-      alert('Не удалось получить доступ к микрофону!');
+      alert('Микрофон недоступен!');
     }
   }
 }
@@ -198,9 +231,7 @@ function leaveCall() {
   if (inCall) {
     inCall = false;
     document.getElementById('call-bar').classList.add('hidden');
-    if (localStream) {
-      localStream.getTracks().forEach(track => track.stop());
-    }
+    if (localStream) localStream.getTracks().forEach(track => track.stop());
     if (peerConnection) {
       peerConnection.close();
       peerConnection = null;
@@ -223,9 +254,7 @@ function createPeerConnection() {
   };
 
   peerConnection.onicecandidate = (e) => {
-    if (e.candidate) {
-      ws.send(JSON.stringify({ type: 'WEBRTC_ICE', candidate: e.candidate }));
-    }
+    if (e.candidate) ws.send(JSON.stringify({ type: 'WEBRTC_ICE', candidate: e.candidate }));
   };
 }
 
