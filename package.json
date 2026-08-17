@@ -1,22 +1,12 @@
 {
-  "name": "baldi-multiplayer-classroom",
+  "name": "3d-cinema-server",
   "version": "1.0.0",
-  "description": "Multiplayer Baldi Classroom Game with WebSockets and Three.js",
   "main": "server.js",
+  "dependencies": {
+    "puppeteer": "^21.0.0",
+    "telegraf": "^4.12.0"
+  },
   "scripts": {
     "start": "node server.js"
-  },
-  "keywords": [
-    "baldi",
-    "threejs",
-    "websockets",
-    "multiplayer",
-    "render"
-  ],
-  "author": "",
-  "license": "ISC",
-  "dependencies": {
-    "express": "^4.19.2",
-    "ws": "^8.16.0"
   }
 }
