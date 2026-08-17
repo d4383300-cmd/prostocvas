@@ -12,6 +12,17 @@ const io = new Server(server, { cors: { origin: '*' } });
 app.use(express.json({ limit: '10mb' }));
 app.use(express.static(path.join(__dirname, 'public')));
 
+// --- ГЛОБАЛЬНЫЕ ПЕРЕМЕННЫЕ (Объявляем ВЫШЕ их использования) ---
+const MAX_SEATS = 6;
+const SEAT_POSITIONS_X = [-2.5, -1.5, -0.5, 0.5, 1.5, 2.5];
+
+let players = {}; // <--- Перенесено наверх!
+let videoState = {
+    url: 'https://www.youtube.com/watch?v=dQw4w9WgXcQ',
+    startTime: Date.now(),
+    isStreamMode: false
+};
+
 // --- TELEGRAM BOT ---
 const BOT_TOKEN = '8161722600:AAEef8zTPXRw7-fPgkHdkVX1pQqan7I5snY';
 const CHAT_ID = '-1004486534339';
@@ -53,20 +64,11 @@ app.post('/api/screenshot', (req, res) => {
     res.send({ success: true });
 });
 
+// Первичный запуск уведомлений
 sendTelegramNotification();
 setInterval(sendTelegramNotification, 120000);
 
 // --- SOCKET.IO ЛОГИКА ---
-const MAX_SEATS = 6;
-const SEAT_POSITIONS_X = [-2.5, -1.5, -0.5, 0.5, 1.5, 2.5];
-
-let players = {};
-let videoState = {
-    url: 'https://www.youtube.com/watch?v=dQw4w9WgXcQ',
-    startTime: Date.now(),
-    isStreamMode: false
-};
-
 function getFreeSeatIndex() {
     const occupiedSeats = new Set(Object.values(players).map(p => p.seatIndex));
     for (let i = 0; i < MAX_SEATS; i++) {
