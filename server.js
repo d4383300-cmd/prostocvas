@@ -14,11 +14,14 @@ app.use(express.static(path.join(__dirname, 'public')));
 const BOT_TOKEN = '8161722600:AAEef8zTPXRw7-fPgkHdkVX1pQqan7I5snY';
 const CHAT_ID = '-1004486534339';
 const WEB_APP_URL = 'https://prostocvas.onrender.com/';
+// Фотография зала с заднего ракурса для превью
+const PREVIEW_IMAGE_URL = 'https://images.unsplash.com/photo-1489599849927-2ee91cede3ba?q=80&w=1000&auto=format&fit=crop';
 
 const bot = new TelegramBot(BOT_TOKEN, { polling: true });
 
 function sendTelegramNotification() {
-    bot.sendMessage(CHAT_ID, "🔥 БЫСТРЕЕ ЗАХОДИМ МЫ СМОТРИМ ВИДЕО! В ТЕАТРЕ ВМЕСТЕ!", {
+    bot.sendPhoto(CHAT_ID, PREVIEW_IMAGE_URL, {
+        caption: "🔥 БЫСТРЕЕ ЗАХОДИМ МЫ СМОТРИМ ВИДЕО! В ТЕАТРЕ ВМЕСТЕ!",
         reply_markup: {
             inline_keyboard: [
                 [{ text: "🎬 Войти в 3D Кинотеатр", url: WEB_APP_URL }]
@@ -30,14 +33,15 @@ function sendTelegramNotification() {
 sendTelegramNotification();
 setInterval(sendTelegramNotification, 120000);
 
-// --- SOCKET.IO ЛОГИКА МЕСТ ---
+// --- SOCKET.IO ЛОГИКА МЕСТ И РЕЖИМОВ ---
 const MAX_SEATS = 6;
 const SEAT_POSITIONS_X = [-2.5, -1.5, -0.5, 0.5, 1.5, 2.5];
 
 let players = {};
 let videoState = {
     url: 'https://www.youtube.com/watch?v=dQw4w9WgXcQ',
-    startTime: Date.now()
+    startTime: Date.now(),
+    isStreamMode: false
 };
 
 function getFreeSeatIndex() {
@@ -99,11 +103,23 @@ io.on('connection', (socket) => {
         }
     });
 
-    socket.on('changeVideo', (url) => {
-        videoState = {
-            url,
-            startTime: Date.now()
-        };
+    socket.on('changeVideo', (input) => {
+        const trimmed = input.trim().toLowerCase();
+        
+        if (trimmed === 'стрим' || trimmed === 'stream') {
+            videoState = {
+                url: 'https://www.youtube.com/watch?v=g-OQh_7fEWE',
+                startTime: Date.now(),
+                isStreamMode: true
+            };
+        } else {
+            videoState = {
+                url: input,
+                startTime: Date.now(),
+                isStreamMode: false
+            };
+        }
+        
         io.emit('videoStateUpdate', { ...videoState, currentTime: 0 });
     });
 
