@@ -16,12 +16,10 @@
     </div>
   </div>
 
-  <!-- Главный контейнер сайта -->
+  <!-- Окно приложения -->
   <div id="app-window">
-    
-    <!-- Заголовок стиля Vista -->
     <div class="vista-titlebar">
-      <div class="title-text">🟡 Прослушка v2.0</div>
+      <div class="title-text">🟡 Прослушка v3.0</div>
       <div class="window-controls">
         <span class="win-btn">_</span>
         <span class="win-btn">□</span>
@@ -35,6 +33,7 @@
         <h2>ГЛАВНОЕ МЕНЮ</h2>
         <div class="gold-buttons">
           <button onclick="openTab('chat-tab')">💬 Общий чат</button>
+          <button onclick="openTab('huyoutube-tab')">📺 Хуютуб</button>
           <button onclick="openTab('rules-tab')">📜 Правила чата</button>
           <button onclick="openTab('profile-tab')">👤 Профиль</button>
           <button onclick="openTab('casino-tab')">🎰 Казино</button>
@@ -43,7 +42,7 @@
       </div>
     </div>
 
-    <!-- Вкладка: Общий чат -->
+    <!-- Вкладка: Чат -->
     <div id="chat-tab" class="view-panel hidden">
       <div class="panel-header">
         <button class="vista-btn back" onclick="openTab('main-menu')">← Меню</button>
@@ -51,7 +50,6 @@
         <button id="call-toggle-btn" class="vista-btn gold" onclick="toggleCall()">📞 Звонок (<span id="call-user-count">0</span>)</button>
       </div>
 
-      <!-- Панель управления звонком -->
       <div id="call-bar" class="hidden">
         <div class="call-info">
           <span>🟢 В звонке: <strong id="call-count-val">0</strong> чел.</span>
@@ -69,7 +67,23 @@
       </div>
     </div>
 
-    <!-- Вкладка: Правила чата -->
+    <!-- Вкладка: Хуютуб -->
+    <div id="huyoutube-tab" class="view-panel hidden">
+      <div class="panel-header">
+        <button class="vista-btn back" onclick="openTab('main-menu')">← Меню</button>
+        <h3>Хуютуб Плеер</h3>
+      </div>
+      <div class="scrollable-content">
+        <div class="vista-box">
+          <p style="margin-bottom:8px;">Вставьте ссылку на YouTube, Rutube или VK Video:</p>
+          <input type="text" id="video-url-input" placeholder="https://..." style="width:100%; margin-bottom:10px;">
+          <button class="vista-btn gold full-width" onclick="loadVideo()">Смотреть Видео</button>
+        </div>
+        <div id="video-embed-container" class="vista-box hidden"></div>
+      </div>
+    </div>
+
+    <!-- Вкладка: Правила -->
     <div id="rules-tab" class="view-panel hidden">
       <div class="panel-header">
         <button class="vista-btn back" onclick="openTab('main-menu')">← Меню</button>
@@ -77,30 +91,12 @@
       </div>
       <div class="scrollable-content rules-body">
         <h3>🗓 Правила чата Cozy Corner</h3>
-        
-        <p><strong>🤝 Уважение к игрокам</strong><br>
-        Запрещены оскорбления, травля, провокации и конфликты.<br>
-        <span class="badge-punish">Мут 10–30 минут 🔇</span></p>
-
-        <p><strong>🚫 Без спама и флуда</strong><br>
-        Не засоряйте чат одинаковыми сообщениями, рекламой и ссылками, не писать по 1 сообщению строчкой.<br>
-        <span class="badge-punish">Мут 40 минут 🔇</span></p>
-
-        <p><strong>🔞 Запрещён 18+ контент</strong><br>
-        Любые материалы, сообщения, фото или видео с непристойным содержанием запрещены.<br>
-        <span class="badge-punish">Варн ⚠️ / Мут 2 часа 🔇</span></p>
-
-        <p><strong>👤 Слушайтесь администрации</strong><br>
-        Администраторы и модераторы следят за порядком. Не спорьте с их решениями.<br>
-        <span class="badge-punish">Мут 15 минут 🔇</span></p>
-
-        <p><strong>🕊️ ПОЛИТИКА</strong><br>
-        Запрещено обсуждать политиков, партии, политические события и международные конфликты. Подобные темы часто приводят к конфликтам между участниками.<br>
-        <span class="badge-punish">Предупреждение ⚠️ варн / Мут 1 час 🔇</span></p>
-
-        <p><strong>☪️✝️ Религия</strong><br>
-        Трогать религию запрещено.<br>
-        <span class="badge-punish">Мут 50 минут 🔇</span></p>
+        <p><strong>🤝 Уважение к игрокам</strong><br>Запрещены оскорбления, травля, провокации.<br><span class="badge-punish">Мут 10–30 минут 🔇</span></p>
+        <p><strong>🚫 Без спама и флуда</strong><br>Не засоряйте чат.<br><span class="badge-punish">Мут 40 минут 🔇</span></p>
+        <p><strong>🔞 Запрещён 18+ контент</strong><br><span class="badge-punish">Варн ⚠️ / Мут 2 часа 🔇</span></p>
+        <p><strong>👤 Слушайтесь администрации</strong><br><span class="badge-punish">Мут 15 минут 🔇</span></p>
+        <p><strong>🕊️ ПОЛИТИКА</strong><br><span class="badge-punish">Варн ⚠️ / Мут 1 час 🔇</span></p>
+        <p><strong>☪️✝️ Религия</strong><br><span class="badge-punish">Мут 50 минут 🔇</span></p>
       </div>
     </div>
 
@@ -112,14 +108,14 @@
       </div>
       <div class="scrollable-content">
         <div class="vista-box">
-          <p>Никнейм: <strong id="profile-nick">Загрузка...</strong></p>
-          <p>Мой ID на сайте: <strong id="profile-site-id">----</strong></p>
+          <p>Никнейм: <strong id="profile-nick">--</strong></p>
+          <p>Мой ID: <strong id="profile-site-id">----</strong></p>
           <p>Баланс: <strong id="profile-balance">0</strong> 🌾 Травы</p>
           <p>Статус: <strong id="profile-admin-status">Пользователь</strong></p>
         </div>
-        <div class="vista-box margin-top">
+        <div class="vista-box">
           <h4>Привязать Telegram</h4>
-          <button class="vista-btn gold full-width" onclick="generateAuthLink()">🔗 Получить ссылку привязки</button>
+          <button class="vista-btn gold full-width" onclick="generateAuthLink()">🔗 Получить ссылку</button>
           <div id="auth-link-box" class="hidden"></div>
         </div>
       </div>
@@ -129,17 +125,17 @@
     <div id="casino-tab" class="view-panel hidden">
       <div class="panel-header">
         <button class="vista-btn back" onclick="openTab('main-menu')">← Меню</button>
-        <h3>Казино "Больше / Меньше"</h3>
+        <h3>Казино</h3>
       </div>
       <div class="scrollable-content text-center">
         <div class="vista-box">
-          <p>Ваш баланс: <strong class="user-balance-val">0</strong> 🌾</p>
-          <input type="number" id="casino-bet" placeholder="Размер ставки" min="1">
+          <p>Баланс: <strong class="user-balance-val">0</strong> 🌾</p>
+          <input type="number" id="casino-bet" placeholder="Размер ставки" min="1" style="width:100%; margin:10px 0;">
           <div class="btn-group">
             <button class="vista-btn gold" onclick="playCasino('less')">Меньше 50</button>
             <button class="vista-btn gold" onclick="playCasino('more')">Больше 50</button>
           </div>
-          <div id="casino-result"></div>
+          <div id="casino-result" style="margin-top:10px;"></div>
         </div>
       </div>
     </div>
@@ -176,7 +172,7 @@
 
   </div>
 
-  <!-- Модальное окно просмотра профиля пользователя -->
+  <!-- Модалка просмотра пользователя -->
   <div id="user-modal" class="modal-overlay hidden" onclick="closeUserModal()">
     <div class="modal-content vista-box" onclick="event.stopPropagation()">
       <h3 id="modal-user-name">Пользователь</h3>
