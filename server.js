@@ -34,9 +34,7 @@ setInterval(sendTelegramNotification, 120000);
 let players = {};
 let videoState = {
     url: 'https://www.youtube.com/watch?v=dQw4w9WgXcQ',
-    type: 'youtube',
-    startTime: Date.now(),
-    paused: false
+    startTime: Date.now()
 };
 
 io.on('connection', (socket) => {
@@ -47,17 +45,15 @@ io.on('connection', (socket) => {
             x: (Math.random() - 0.5) * 2,
             y: 0.6,
             z: 2 + Math.random(),
-            rotY: 0,
-            headPitch: 0
+            rotY: 0
         };
 
-        // Рассчитываем текущий таймкод для подключающегося игрока
-        const currentOffset = videoState.paused ? 0 : (Date.now() - videoState.startTime) / 1000;
+        const currentTime = (Date.now() - videoState.startTime) / 1000;
 
         socket.emit('init', {
             id: socket.id,
             players,
-            videoState: { ...videoState, currentTime: currentOffset }
+            videoState: { ...videoState, currentTime }
         });
 
         socket.broadcast.emit('playerJoined', players[socket.id]);
@@ -81,18 +77,10 @@ io.on('connection', (socket) => {
     });
 
     socket.on('changeVideo', (url) => {
-        let type = 'direct';
-        if (url.includes('youtube.com') || url.includes('youtu.be')) type = 'youtube';
-        else if (url.includes('vk.com') || url.includes('vkvideo.ru')) type = 'vk';
-        else if (url.includes('rutube.ru')) type = 'rutube';
-
         videoState = {
             url,
-            type,
-            startTime: Date.now(),
-            paused: false
+            startTime: Date.now()
         };
-
         io.emit('videoStateUpdate', { ...videoState, currentTime: 0 });
     });
 
