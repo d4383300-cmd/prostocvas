@@ -1,14 +1,16 @@
 {
-  "name": "cinema-3d-bot",
-  "version": "4.0.0",
-  "description": "3D Cinema WebApp with Real Players and NPC distribution",
+  "name": "casino-99x",
+  "version": "1.0.0",
+  "description": "Telegram WebApp Casino 99X",
   "main": "server.js",
   "scripts": {
     "start": "node server.js"
   },
   "dependencies": {
     "express": "^4.18.2",
-    "node-telegram-bot-api": "^0.61.0",
-    "socket.io": "^4.6.1"
+    "node-cron": "^3.0.3",
+    "node-fetch": "^2.7.0",
+    "sqlite3": "^5.1.7",
+    "telegraf": "^4.16.3"
   }
 }
