@@ -2,103 +2,102 @@
 <html lang="ru">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
-    <title>3D Кинотеатр</title>
-    <style>
-        * { box-sizing: border-box; touch-action: manipulation; }
-        body, html { margin: 0; padding: 0; width: 100%; height: 100%; overflow: hidden; background: #000; font-family: sans-serif; }
-        
-        #webgl, #css3d { position: absolute; top: 0; left: 0; width: 100%; height: 100%; }
-        #webgl { z-index: 1; }
-        #css3d { z-index: 2; pointer-events: none; }
-
-        #crosshair {
-            position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%);
-            width: 6px; height: 6px; background: rgba(255, 255, 255, 0.8);
-            border-radius: 50%; pointer-events: none; z-index: 10;
-        }
-
-        #hint {
-            position: fixed; top: 10px; left: 10px; color: #fff;
-            background: rgba(0,0,0,0.7); padding: 8px 12px; border-radius: 6px;
-            pointer-events: none; font-size: 11px; z-index: 10; border: 1px solid #333;
-        }
-
-        #videoModal {
-            display: none; position: fixed; top: 50%; left: 50%;
-            transform: translate(-50%, -50%); background: #141416;
-            padding: 16px; border-radius: 10px; border: 1px solid #ff0055;
-            z-index: 100; text-align: center; color: white; width: 90%; max-width: 360px;
-        }
-        #videoModal input {
-            width: 100%; padding: 10px; margin: 10px 0; border-radius: 5px;
-            border: 1px solid #333; background: #08080a; color: #fff; outline: none; font-size: 12px;
-        }
-        #videoModal button {
-            padding: 8px 18px; background: #ff0055; color: white;
-            border: none; border-radius: 5px; cursor: pointer; font-weight: bold;
-        }
-
-        #chatContainer {
-            position: fixed; bottom: 20px; left: 20px; width: 240px;
-            z-index: 50; pointer-events: none;
-        }
-        #chatHistory {
-            height: 100px; overflow-y: auto; display: flex; flex-direction: column;
-            gap: 4px; margin-bottom: 6px;
-        }
-        .chat-msg {
-            background: rgba(0, 0, 0, 0.7); padding: 4px 8px; border-radius: 4px;
-            color: #fff; font-size: 11px; width: fit-content; max-width: 100%;
-        }
-        .chat-msg b { color: #ff3366; }
-        
-        #chatInputContainer {
-            display: none; width: 100%; pointer-events: auto; flex-direction: row; gap: 4px;
-        }
-        #chatInput {
-            flex: 1; padding: 10px; border-radius: 4px; border: 1px solid #444;
-            background: rgba(0, 0, 0, 0.9); color: #fff; outline: none; font-size: 13px;
-        }
-
-        .mobile-btn {
-            position: fixed; z-index: 40; background: rgba(255,0,85,0.8); color: white;
-            border: none; border-radius: 50%; width: 50px; height: 50px; font-size: 18px;
-            display: flex; align-items: center; justify-content: center; cursor: pointer;
-        }
-        #btnChat { bottom: 20px; right: 20px; }
-        #btnVideo { bottom: 80px; right: 20px; }
-    </style>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>99X Casino</title>
     <script src="https://telegram.org/js/telegram-web-app.js"></script>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/renderers/CSS3DRenderer.js"></script>
-    <script src="/socket.io/socket.io.js"></script>
+    <link rel="stylesheet" href="style.css">
 </head>
 <body>
-    <div id="crosshair"></div>
-    <div id="hint">
-        🖱️ <b>Клик:</b> Захват мыши | 💬 <b>Enter:</b> Чат | 🎬 <b>T:</b> Изменить видео
+
+    <!-- Заставка -->
+    <div id="splash-screen">
+        <div class="splash-title" id="splash-text">Привет...</div>
     </div>
 
-    <div id="videoModal">
-        <h4 style="margin: 0 0 8px 0;">Вставьте ссылку на видео</h4>
-        <input type="text" id="videoUrlInput" placeholder="Ссылка на YouTube / RuTube">
-        <button onclick="submitVideoUrl()">Запустить</button>
+    <!-- Регистрация вне ТГ -->
+    <div id="auth-block" style="display:none; text-align:center; padding: 50px 20px;">
+        <h2>Ошибка доступа</h2>
+        <p>Пожалуйста, войдите через официального Telegram бота.</p>
+        <button class="ios-btn" onclick="window.location.href='https://t.me/your_bot'">Регистрация через Telegram</button>
     </div>
 
-    <div id="chatContainer">
-        <div id="chatHistory"></div>
-        <div id="chatInputContainer">
-            <input type="text" id="chatInput" placeholder="Сообщение..." maxlength="80">
-            <button onclick="sendMessage()" style="background:#ff0055; color:#fff; border:none; padding:0 10px; border-radius:4px;">➤</button>
+    <!-- Главный интерфейс -->
+    <div id="main-app" style="display:none;">
+        <header class="app-header">
+            <div class="logo">99X</div>
+            <div class="balance-badge"><span id="user-balance">0</span> ₽</div>
+        </header>
+
+        <!-- Вкладка: Игры -->
+        <div id="tab-games" class="tab-content">
+            <div class="games-grid">
+                <div class="game-card">
+                    <h3>🎲 DICE</h3>
+                    <button class="ios-btn" onclick="openGame('dice')">Играть</button>
+                </div>
+                <div class="game-card">
+                    <h3>🎡 Рулетка</h3>
+                    <button class="ios-btn" onclick="openGame('roulette')">Играть</button>
+                </div>
+                <div class="game-card">
+                    <h3>🎰 Слоты</h3>
+                    <button class="ios-btn" onclick="openGame('slots')">Играть</button>
+                </div>
+                <div class="game-card">
+                    <h3>⚽ Футбол</h3>
+                    <button class="ios-btn" onclick="openGame('football')">Играть</button>
+                </div>
+            </div>
         </div>
+
+        <!-- Окно Игр (Динамическое) -->
+        <div id="game-modal" style="display:none; padding: 20px; text-align: center;">
+            <h2 id="game-title">Игра</h2>
+            <input type="number" id="bet-amount" class="chat-input" placeholder="Введите ставку" value="10">
+            <div id="game-controls" style="margin-top: 15px;"></div>
+            <button class="ios-btn" style="margin-top: 15px;" onclick="closeGame()">Назад в меню</button>
+        </div>
+
+        <!-- Вкладка: Профиль -->
+        <div id="tab-profile" class="tab-content" style="display:none; padding: 20px;">
+            <h3>Профиль</h3>
+            <p>ID: <span id="prof-id"></span></p>
+            <button class="ios-btn" onclick="depositStars()">Пополнить звездами ⭐ (1 ⭐ = 1 ₽)</button>
+            <p style="margin-top:15px;">Пополнение рублями через админа: <a href="https://t.me/leymik" style="color:var(--neon-glow)">@leymik</a></p>
+
+            <!-- Панель Администратора -->
+            <div id="admin-panel" style="display:none; margin-top: 20px; border-top: 1px solid var(--glass-border); padding-top: 10px;">
+                <h4 style="color: red;">Админ-Панель</h4>
+                <input type="text" id="admin-target" class="chat-input" placeholder="ID или Username">
+                <input type="number" id="admin-amount" class="chat-input" placeholder="Сумма" style="margin-top:5px;">
+                <button class="ios-btn" onclick="adminAddBalance()" style="margin-top:5px;">Выдать баланс</button>
+            </div>
+        </div>
+
+        <!-- Вкладка: Вывод -->
+        <div id="tab-withdraw" class="tab-content" style="display:none; padding: 20px; text-align:center;">
+            <h3>Вывод средств</h3>
+            <p>Минимальная сумма вывода: <b>250 ₽</b></p>
+            <input type="number" class="chat-input" placeholder="Сумма вывода">
+            <button class="ios-btn" onclick="alert('Ошибка: Недостаточно средств или баланс не отыгран!')" style="margin-top: 10px;">Запросить вывод</button>
+        </div>
+
+        <!-- Общий чат -->
+        <div class="chat-container">
+            <div class="chat-messages" id="chat-box"></div>
+            <div class="chat-input-zone">
+                <input type="text" id="chat-msg" class="chat-input" placeholder="Сообщение...">
+                <button class="ios-btn" onclick="sendChatMessage()">></button>
+            </div>
+        </div>
+
+        <!-- Навигационное меню -->
+        <nav class="bottom-nav">
+            <button class="ios-btn" onclick="switchTab('profile')">Профиль</button>
+            <button class="ios-btn" onclick="switchTab('games')">Игры</button>
+            <button class="ios-btn" onclick="switchTab('withdraw')">Вывод</button>
+        </nav>
     </div>
-
-    <button class="mobile-btn" id="btnChat">💬</button>
-    <button class="mobile-btn" id="btnVideo">🎬</button>
-
-    <div id="webgl"></div>
-    <div id="css3d"></div>
 
     <script src="app.js"></script>
 </body>
